@@ -3,150 +3,564 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>藥局線上排班系統 (除錯版)</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <title>線上排班系統</title>
+    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        .loading-spinner { border-top-color: #0D9488; animation: spinner 1s linear infinite; }
-        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        [v-cloak] { display: none; }
-        body { touch-action: manipulation; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f3f4f6; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans">
+<body>
+    <div id="root"></div>
 
-<div id="app" v-cloak class="max-w-md mx-auto min-h-screen bg-white shadow-2xl relative flex flex-col">
-    
-    <header class="bg-teal-700 text-white p-4 sticky top-0 z-50 shadow-lg">
-        <div class="flex justify-between items-center">
-            <h1 class="text-lg font-bold flex items-center">
-                <i class="fas fa-prescription-bottle-alt mr-2"></i> 藥局班表
-            </h1>
-            <button @click="init" class="bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600">
-                <i class="fas fa-sync"></i> 重連
-            </button>
-        </div>
-    </header>
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
 
-    <div v-if="loading" class="flex-1 flex flex-col items-center justify-center min-h-[50vh]">
-        <div class="loading-spinner ease-linear rounded-full border-4 border-t-4 border-gray-200 h-10 w-10 mb-3"></div>
-        <p class="text-gray-500 text-sm animate-pulse">正在讀取雲端資料庫...</p>
-        <p class="text-xs text-gray-400 mt-2">請留意瀏覽器 Console 訊息</p>
-    </div>
+        // ==========================================
+        // CONFIGURATION 設定區 (請在此修改)
+        // ==========================================
+        
+        // 1. 是否使用模擬資料 (上線時請改為 false)
+        const USE_MOCK_DATA = false; 
 
-    <div v-else-if="errorMsg" class="flex-1 flex flex-col items-center justify-center p-8 text-center">
-        <div class="bg-red-50 text-red-600 p-4 rounded-full mb-4"><i class="fas fa-wifi text-2xl"></i></div>
-        <h3 class="font-bold text-lg mb-2">讀取失敗</h3>
-        <p class="text-sm text-gray-500 mb-6 whitespace-pre-line">{{ errorMsg }}</p>
-        <button @click="init" class="px-6 py-2 bg-teal-600 text-white rounded-lg shadow active:scale-95 transition">重試</button>
-    </div>
+        // 2. Google Sheet 設定 (當 USE_MOCK_DATA = false 時生效)
+        // 請將您的 Google Sheet ID 填入下方 (從網址列複製 d/ 與 /edit 之間的字串)
+        // 範例網址: https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit
+        const GOOGLE_SPREADSHEET_ID = "1OfGyESqORhCNdQRm7kVQkF9jirkpZPO1FNnZxmzFIZc"; 
 
-    <main v-else class="flex-1 overflow-y-auto pb-20">
-        <div class="p-4 text-center">
-            <h2 class="text-green-600 font-bold text-xl mb-2">連線成功！</h2>
-            <p class="text-gray-600">目前月份：{{ currentSheet }}</p>
-            <p class="text-gray-500 text-sm mt-4">共有 {{ allStaff.length }} 位人員資料</p>
-            
-            <div class="mt-6 border p-4 rounded bg-gray-50 text-left text-xs font-mono overflow-auto max-h-60">
-                {{ allStaff }}
-            </div>
-        </div>
-    </main>
-</div>
+        // 3. 分頁名稱設定
+        // 請確保您的 Google Sheet 分頁名稱與此處設定一致
+        const SHIFT_DEF_SHEET_NAME = "班別資料"; // 存放班別定義的分頁名稱
 
-<script>
-    const { createApp } = Vue;
+        // ==========================================
+        // MOCK DATA 模擬資料 (無需修改)
+        // ==========================================
+        const MOCK_SHIFT_DEFS = `班別,時數,時間,說明
+-,0,-:~-:,未排班
+A,8,15:45~00:15,"小夜班ER ,休息(15:45-16:00,0:00-0:15)"
+D,8,08:00~17:30,"正常班(0800~1200,1330~1730)"
+D6,8,08:30~17:00,"8:30-12:30,13:00-17:00"
+O,0,-:~-:,休假
+H,0,-:~-:,例假日
+TD,8,09:00~17:30,TD班
+DP1,10,08:00~20:30,"夜診(0800~1200,1330~1730,1830~2030)"
+RD,8,08:00~16:00,RD班
+U,0,-:~-:,特休
+S,4,08:00~12:00,半天班`;
 
-    // ==========================================
-    // 【請填入你的新網址】
-    // 記得：結尾是 /exec，不要有空白
-    // ==========================================
-    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbwy8wbREmeuYvQwSWcJgq_56ulQQQG09i4ggMp_HqxExH5jmG4MwRtl3e0HiydUfdnR/exec'; 
+        const MOCK_SCHEDULE_2026_01 = `職稱,員工編號,姓名,1(四),2(五),3(六),4(日),5(一),6(二),7(三),8(四),9(五),10(六),11(日),12(一),13(二),14(三),15(四),16(五),17(六),18(日),19(一),20(二),21(三),22(四),23(五),24(六),25(日),26(一),27(二),28(三),29(四),30(五),31(六)
+排班負責人,2277,洪一仁,-,D,-,-,D,D,D,D,D,-,-,D,D,D,D,D,-,-,D,D,D,D,D,-,-,D,D,D,D,D,-
+一般同仁,116,吳惠珠,D,D6,C,-,D6,S1,D6,DP1,-,-,-,D6,S1,D6,D6,D6,-,-,D6,D6,D6,DP1,D6,-,-,D6,S1,D6,D6,D6,C
+一般同仁,2772,陳佳瑜,D,-,-,-,D,DP1,D,D,D,-,-,D,D,D,D,DP1,-,-,D,S2,D,D,S,-,-,D,D,D,D,S,HD
+一般同仁,4602,林聖雅,D8,TD,O,H,D8,D4,D4,O,TD,U,H,D6,D4,A,O,O,O,H,D4,TP1,RD,D4,D4,TS1,H,TD,SP,O,DP2,D4,U
+一般同仁,5035,陳妍蓁,D1,D2,O,H,D4,D3,D7,DP2,D1,O,H,D9,D5,SP,O,NN,U,H,D7,O,D6,O,TP1,C,H,ED,D4,TD,D4,SP,O
+一般同仁,5052,解志欽,NN,NN,O,H,O,NN,NN,NN,NN,O,H,D,D,D,D,D,O,H,NN,NN,NN,NN,NN,O,H,NN,NN,NN,NN,D0,O
+一般同仁,5233,陳凱微,D5,D3,O,H,D5,TS1,D1,RD,DP2,O,H,SP,SP,O,ED,D8,O,H,D5,D7,D4,TP1,TD,U,H,RD,D6,A,O,D2,O`;
 
-    createApp({
-        data() {
-            return {
-                loading: true,
-                errorMsg: '',
-                sheetList: [], 
-                currentSheet: '', 
-                allStaff: [],
-            }
-        },
-        mounted() {
-            // 測試 Vue 是否活著
-            console.log("Vue Mounted 成功啟動！");
-            
-            // 檢查是否忘記填網址
-            if (GAS_API_URL.includes("你的 GAS 部署網址")) {
-                this.errorMsg = "請修改程式碼，填入正確的 GAS_API_URL";
-                this.loading = false;
-                alert("提醒：你還沒填入 GAS 網址喔！");
-                return;
-            }
+        // ==========================================
+        // HELPER FUNCTIONS 工具函式
+        // ==========================================
+        
+        // 產生月份列表 (目前年份 前後1.5年)
+        const generateMonthOptions = () => {
+            const options = [];
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            const startYear = currentYear - 1;
+            const endYear = currentYear + 1;
 
-            this.init();
-        },
-        methods: {
-            async init() {
-                this.loading = true;
-                this.errorMsg = '';
-                
-                const cleanUrl = GAS_API_URL.trim();
-                console.log("🚀 [1/5] 準備連線至:", cleanUrl);
-
-                try {
-                    const url = new URL(cleanUrl);
-                    url.searchParams.set('op', 'get_months');
-                    console.log("🔗 [2/5] 完整請求網址:", url.toString());
-
-                    const res = await fetch(url.toString(), { 
-                        method: 'GET',
-                        redirect: 'follow'
-                    });
-                    
-                    console.log("📡 [3/5] HTTP 狀態碼:", res.status);
-
-                    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-                    
-                    const textData = await res.text();
-                    console.log("📦 [4/5] 伺服器回傳原始資料:", textData);
-                    
-                    let json;
-                    try {
-                        json = JSON.parse(textData);
-                    } catch (e) {
-                        if (textData.includes("<!DOCTYPE html>")) {
-                            throw new Error("權限錯誤：回傳了 HTML。請檢查 GAS 部署是否為「任何人 (Anyone)」");
-                        }
-                        throw new Error("JSON 解析失敗: " + e.message);
-                    }
-                    
-                    if (json.status === 'success') {
-                        console.log("✅ [5/5] 資料解析成功:", json.data);
-                        this.sheetList = json.data;
-                        if (this.sheetList.length > 0) {
-                            this.currentSheet = this.sheetList[this.sheetList.length - 1];
-                            // 這裡我們只先顯示連線成功，暫不抓詳細班表，確保第一步通了再說
-                            this.loading = false; 
-                        } else {
-                            this.errorMsg = "資料庫中找不到任何月份資料";
-                            this.loading = false;
-                        }
-                    } else {
-                        throw new Error(json.message || "未知的 API 錯誤");
-                    }
-                } catch (e) {
-                    console.error("❌ 詳細錯誤:", e);
-                    this.errorMsg = "連線失敗：" + e.message;
-                    this.loading = false;
+            for (let y = startYear; y <= endYear; y++) {
+                for (let m = 1; m <= 12; m++) {
+                    const monthStr = `${y}-${String(m).padStart(2, '0')}`;
+                    options.push(monthStr);
                 }
             }
-        }
-    }).mount('#app');
-</script>
+            return options.reverse(); // 最近的月份在上面
+        };
+
+        const parseCSV = (text) => {
+            const rows = [];
+            let currentRow = [];
+            let currentCell = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                const nextChar = text[i + 1];
+
+                if (char === '"') {
+                    if (inQuotes && nextChar === '"') {
+                        currentCell += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    currentRow.push(currentCell.trim());
+                    currentCell = '';
+                } else if ((char === '\r' || char === '\n') && !inQuotes) {
+                    if (char === '\r' && nextChar === '\n') i++;
+                    if (currentCell || currentRow.length > 0) {
+                        currentRow.push(currentCell.trim());
+                        rows.push(currentRow);
+                    }
+                    currentRow = [];
+                    currentCell = '';
+                } else {
+                    currentCell += char;
+                }
+            }
+            if (currentCell || currentRow.length > 0) {
+                currentRow.push(currentCell.trim());
+                rows.push(currentRow);
+            }
+            return rows;
+        };
+
+        const processShiftDefs = (csvText) => {
+            const rows = parseCSV(csvText);
+            const defs = {};
+            for(let i=1; i<rows.length; i++) {
+                if (rows[i].length < 2) continue;
+                const [code, hours, time, desc] = rows[i];
+                if(code) {
+                    defs[code] = { hours, time, desc };
+                }
+            }
+            return defs;
+        };
+
+        const processSchedule = (csvText) => {
+            const rows = parseCSV(csvText);
+            let headerRowIndex = rows.findIndex(row => row.includes("姓名"));
+            if (headerRowIndex === -1) return { headers: [], data: [] };
+
+            const headers = rows[headerRowIndex];
+            const data = rows.slice(headerRowIndex + 1).filter(row => row.length > 3 && row[2]); 
+
+            const dateHeaders = headers.slice(3).map(h => h);
+            return { headers: dateHeaders, data, rawHeaders: headers };
+        };
+
+        // ==========================================
+        // APP COMPONENT 主程式
+        // ==========================================
+        const App = () => {
+            const [currentMonth, setCurrentMonth] = useState("2026-01");
+            const [activeTab, setActiveTab] = useState("daily");
+            const [shiftDefs, setShiftDefs] = useState({});
+            const [scheduleData, setScheduleData] = useState({ headers: [], data: [] });
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+            
+            // 下拉選單選項 (自動生成)
+            const monthOptions = useMemo(() => generateMonthOptions(), []);
+
+            // Daily View State
+            const [selectedDayIndex, setSelectedDayIndex] = useState(0);
+
+            // Personal View State
+            const [selectedPersonId, setSelectedPersonId] = useState("");
+            const [searchTerm, setSearchTerm] = useState("");
+
+            useEffect(() => {
+                const fetchData = async () => {
+                    setLoading(true);
+                    setError(null);
+                    setScheduleData({ headers: [], data: [] }); // Clear old data first
+
+                    try {
+                        let defsText, scheduleText;
+
+                        if (USE_MOCK_DATA) {
+                            await new Promise(r => setTimeout(r, 500));
+                            defsText = MOCK_SHIFT_DEFS;
+                            scheduleText = currentMonth === "2026-01" ? MOCK_SCHEDULE_2026_01 : "";
+                            
+                            if (!scheduleText) {
+                                throw new Error("模擬模式：僅提供 2026-01 資料範例。");
+                            }
+                        } else {
+                            if (!GOOGLE_SPREADSHEET_ID || GOOGLE_SPREADSHEET_ID === "您的_Google_Sheet_ID") {
+                                throw new Error("請先在程式碼中設定 GOOGLE_SPREADSHEET_ID");
+                            }
+
+                            // 建構 Google Viz API URL
+                            // 格式: https://docs.google.com/spreadsheets/d/{ID}/gviz/tq?tqx=out:csv&sheet={SheetName}
+                            const baseUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
+                            const defsUrl = `${baseUrl}&sheet=${encodeURIComponent(SHIFT_DEF_SHEET_NAME)}`;
+                            const scheduleUrl = `${baseUrl}&sheet=${encodeURIComponent(currentMonth)}`;
+
+                            const [resDefs, resSched] = await Promise.all([
+                                fetch(defsUrl),
+                                fetch(scheduleUrl)
+                            ]);
+
+                            if (!resDefs.ok) throw new Error("讀取班別資料失敗，請檢查分頁名稱是否為「" + SHIFT_DEF_SHEET_NAME + "」");
+                            if (!resSched.ok) throw new Error(`讀取 ${currentMonth} 班表失敗。請確認該月份分頁是否存在，且名稱正確 (例如: 2026-01)。`);
+
+                            defsText = await resDefs.text();
+                            scheduleText = await resSched.text();
+                        }
+
+                        // 檢查是否返回了 HTML (通常代表權限不足或分頁不存在)
+                        if (scheduleText.trim().startsWith("<!DOCTYPE html") || scheduleText.includes("google-visualization-errors")) {
+                            throw new Error(`無法讀取 ${currentMonth} 資料。可能原因：\n1. 分頁尚未建立\n2. 分頁名稱錯誤\n3. 試算表未設定為「知道連結者可檢視」`);
+                        }
+
+                        setShiftDefs(processShiftDefs(defsText));
+                        
+                        const processedSchedule = processSchedule(scheduleText);
+                        if (processedSchedule.data.length === 0) {
+                            throw new Error("讀取成功但無資料，請檢查 CSV 格式或標題列是否包含「姓名」。");
+                        }
+                        setScheduleData(processedSchedule);
+
+                    } catch (e) {
+                        console.error(e);
+                        setError(e.message);
+                    } finally {
+                        setLoading(false);
+                    }
+                };
+
+                fetchData();
+            }, [currentMonth]);
+
+            useEffect(() => {
+                setSelectedDayIndex(0);
+            }, [currentMonth]);
+
+            const getShiftStyle = (code) => {
+                const c = (code || "").trim().toUpperCase();
+                if(["O", "H", "U", "OFF", "-", ""].includes(c)) return "bg-gray-100 text-gray-400";
+                if(c.includes("N") || c.includes("P") || c === "A") return "bg-indigo-100 text-indigo-700 border-l-4 border-indigo-500";
+                if(c.includes("D") || c === "S") return "bg-amber-50 text-amber-700 border-l-4 border-amber-500";
+                return "bg-white border border-gray-200 text-gray-700";
+            };
+
+            const getShiftInfo = (code) => {
+                const cleanCode = (code || "").trim();
+                return shiftDefs[cleanCode] || { time: "", desc: "" };
+            };
+
+            // Loading View
+            if (loading && !scheduleData.data.length) {
+                return (
+                    <div className="flex items-center justify-center h-screen bg-gray-50 flex-col">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                        <p className="text-gray-500">正在讀取 {currentMonth} 班表...</p>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen pb-20 max-w-4xl mx-auto bg-white shadow-lg min-h-screen flex flex-col">
+                    {/* Header */}
+                    <header className="bg-blue-600 text-white p-4 sticky top-0 z-50 shadow-md">
+                        <div className="flex justify-between items-center mb-4">
+                            <h1 className="text-xl font-bold flex items-center gap-2">
+                                <i data-lucide="calendar"></i>
+                                線上排班系統
+                            </h1>
+                            <select 
+                                value={currentMonth} 
+                                onChange={(e) => setCurrentMonth(e.target.value)}
+                                className="bg-blue-700 text-white border border-blue-500 rounded px-2 py-1 text-sm focus:outline-none appearance-none cursor-pointer hover:bg-blue-600"
+                            >
+                                {monthOptions.map(m => (
+                                    <option key={m} value={m}>{m}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Navigation Tabs */}
+                        <div className="flex bg-blue-800 p-1 rounded-lg">
+                            <button onClick={() => setActiveTab('daily')} className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'daily' ? 'bg-white text-blue-800 shadow' : 'text-blue-200 hover:text-white'}`}>每日人員</button>
+                            <button onClick={() => setActiveTab('personal')} className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'personal' ? 'bg-white text-blue-800 shadow' : 'text-blue-200 hover:text-white'}`}>個人班表</button>
+                            <button onClick={() => setActiveTab('full')} className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'full' ? 'bg-white text-blue-800 shadow' : 'text-blue-200 hover:text-white'}`}>總表檢視</button>
+                        </div>
+                    </header>
+
+                    <main className="p-4 flex-grow">
+                        {error ? (
+                            <div className="bg-red-50 text-red-600 p-6 rounded-lg border border-red-200 text-center">
+                                <i data-lucide="alert-circle" className="mx-auto mb-2 w-8 h-8 text-red-500"></i>
+                                <h3 className="font-bold mb-2">無法讀取資料</h3>
+                                <p className="text-sm whitespace-pre-line">{error}</p>
+                                {!USE_MOCK_DATA && (
+                                    <div className="mt-4 text-xs text-left bg-white p-3 rounded border text-gray-600">
+                                        <strong>檢查清單：</strong>
+                                        <ul className="list-disc pl-5 mt-1 space-y-1">
+                                            <li>確認 Google Sheet 已設定「知道連結者可檢視」。</li>
+                                            <li>確認分頁名稱是否為 <code>{currentMonth}</code>。</li>
+                                            <li>確認 Sheet ID 是否正確。</li>
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <>
+                                {/* VIEW: DAILY (每日檢視) */}
+                                {activeTab === 'daily' && scheduleData.headers.length > 0 && (
+                                    <div className="animate-fade-in">
+                                        {/* Date Scroller */}
+                                        <div className="flex overflow-x-auto pb-4 gap-2 hide-scrollbar mb-4 -mx-4 px-4 bg-gray-50 pt-2 border-b">
+                                            {scheduleData.headers.map((dayLabel, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => setSelectedDayIndex(idx)}
+                                                    className={`flex-shrink-0 w-14 h-16 flex flex-col items-center justify-center rounded-lg border transition-all ${
+                                                        selectedDayIndex === idx 
+                                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md transform scale-105' 
+                                                        : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                                                    }`}
+                                                >
+                                                    <span className="text-xs opacity-80">{dayLabel.replace(/[0-9]/g, '')}</span>
+                                                    <span className="text-lg font-bold">{dayLabel.replace(/[^0-9]/g, '')}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2 text-sm">
+                                                {scheduleData.headers[selectedDayIndex]}
+                                            </span>
+                                            當日排班狀況
+                                        </h2>
+
+                                        <div className="space-y-3">
+                                            {(() => {
+                                                const dayShifts = {};
+                                                scheduleData.data.forEach(person => {
+                                                    const shift = person[3 + selectedDayIndex]; 
+                                                    if(!shift || shift === "-" || shift === "") return;
+                                                    if(!dayShifts[shift]) dayShifts[shift] = [];
+                                                    dayShifts[shift].push(person[2]);
+                                                });
+
+                                                const sortedShifts = Object.keys(dayShifts).sort((a, b) => {
+                                                    const typeA = ["O","H","U"].includes(a) ? 2 : 1;
+                                                    const typeB = ["O","H","U"].includes(b) ? 2 : 1;
+                                                    return typeA - typeB;
+                                                });
+
+                                                if (sortedShifts.length === 0) return <div className="text-gray-400 text-center py-8 bg-gray-50 rounded-lg">本日無排班資料</div>;
+
+                                                return sortedShifts.map(shiftCode => {
+                                                    const info = getShiftInfo(shiftCode);
+                                                    const isOff = ["O", "H", "U", "OFF"].includes(shiftCode);
+                                                    
+                                                    return (
+                                                        <div key={shiftCode} className={`rounded-lg p-4 ${getShiftStyle(shiftCode)} ${isOff ? 'opacity-70' : 'shadow-sm'}`}>
+                                                            <div className="flex justify-between items-start mb-2 border-b border-black/10 pb-2">
+                                                                <div>
+                                                                    <span className="font-bold text-lg mr-2">{shiftCode}</span>
+                                                                    <span className="text-xs opacity-80 block sm:inline">{info.time}</span>
+                                                                </div>
+                                                                <span className="text-xs bg-black/10 px-2 py-1 rounded">
+                                                                    {dayShifts[shiftCode].length} 人
+                                                                </span>
+                                                            </div>
+                                                            <div className="text-sm opacity-90 mb-2">{info.desc}</div>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {dayShifts[shiftCode].map(name => (
+                                                                    <span key={name} className="bg-white/50 px-2 py-1 rounded text-sm font-medium">
+                                                                        {name}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                });
+                                            })()}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* VIEW: PERSONAL (個人檢視) */}
+                                {activeTab === 'personal' && (
+                                    <div className="animate-fade-in">
+                                        <div className="mb-6">
+                                            <div className="relative">
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="輸入姓名搜尋..." 
+                                                    className="w-full p-3 pl-10 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                    value={searchTerm}
+                                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                                />
+                                                <div className="absolute left-3 top-3 text-gray-400">
+                                                    <i data-lucide="search" className="w-5 h-5"></i>
+                                                </div>
+                                            </div>
+                                            
+                                            {searchTerm && (
+                                                <div className="mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto z-10">
+                                                    {scheduleData.data
+                                                        .filter(p => p[2].includes(searchTerm))
+                                                        .map(p => (
+                                                            <button 
+                                                                key={p[1]} 
+                                                                className="w-full text-left px-4 py-2 hover:bg-blue-50 border-b border-gray-100 last:border-0"
+                                                                onClick={() => {
+                                                                    setSelectedPersonId(p[1]);
+                                                                    setSearchTerm("");
+                                                                }}
+                                                            >
+                                                                <span className="font-bold text-gray-800">{p[2]}</span>
+                                                                <span className="text-gray-500 text-xs ml-2">({p[0]})</span>
+                                                            </button>
+                                                        ))
+                                                    }
+                                                </div>
+                                            )}
+
+                                            {!searchTerm && !selectedPersonId && (
+                                                <div className="mt-4">
+                                                    <p className="text-xs text-gray-500 mb-2">快速選擇：</p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {scheduleData.data.slice(0, 5).map(p => (
+                                                            <button 
+                                                                key={p[1]} 
+                                                                onClick={() => setSelectedPersonId(p[1])}
+                                                                className="bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-full text-sm text-gray-700 transition"
+                                                            >
+                                                                {p[2]}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {selectedPersonId ? (() => {
+                                            const person = scheduleData.data.find(p => p[1] === selectedPersonId);
+                                            if (!person) return <div className="text-center text-gray-500">查無此人</div>;
+
+                                            let workDays = 0, offDays = 0;
+                                            person.slice(3).forEach(s => {
+                                                if(["O", "H", "U", "OFF"].includes(s)) offDays++;
+                                                else if(s && s !== "-" && s !== "") workDays++;
+                                            });
+
+                                            return (
+                                                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                                                    <div className="bg-gray-800 text-white p-4 flex justify-between items-center">
+                                                        <div>
+                                                            <h2 className="text-xl font-bold">{person[2]}</h2>
+                                                            <p className="text-sm opacity-80">{person[0]} (ID: {person[1]})</p>
+                                                        </div>
+                                                        <button onClick={() => setSelectedPersonId("")} className="text-sm bg-gray-700 px-3 py-1 rounded hover:bg-gray-600">
+                                                            重選
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    <div className="flex bg-gray-50 border-b border-gray-200 p-2 text-sm text-gray-600 justify-around">
+                                                        <span>出勤: <b>{workDays}</b> 天</span>
+                                                        <span>休假: <b>{offDays}</b> 天</span>
+                                                    </div>
+
+                                                    <div className="divide-y divide-gray-100">
+                                                        {scheduleData.headers.map((date, idx) => {
+                                                            const shiftCode = person[3 + idx];
+                                                            const info = getShiftInfo(shiftCode);
+                                                            const style = getShiftStyle(shiftCode);
+                                                            
+                                                            if(!shiftCode || shiftCode === "-") return null;
+
+                                                            return (
+                                                                <div key={idx} className="flex items-center p-3 hover:bg-gray-50">
+                                                                    <div className="w-16 text-center border-r border-gray-100 pr-3 mr-3">
+                                                                        <div className="text-xs text-gray-500">{date.replace(/[0-9]/g, '')}</div>
+                                                                        <div className="text-lg font-bold text-gray-800">{date.replace(/[^0-9]/g, '')}</div>
+                                                                    </div>
+                                                                    <div className="flex-1">
+                                                                        <div className="flex items-center gap-2 mb-1">
+                                                                            <span className={`px-2 py-0.5 rounded text-sm font-bold border ${style.replace('border-l-4', '')}`}>
+                                                                                {shiftCode}
+                                                                            </span>
+                                                                            <span className="text-sm font-medium text-gray-700">{info.time}</span>
+                                                                        </div>
+                                                                        <div className="text-xs text-gray-500">{info.desc}</div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })() : (
+                                            <div className="text-center py-10 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                                                <p className="text-gray-500">請選擇人員以檢視班表</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* VIEW: FULL TABLE (總表檢視) */}
+                                {activeTab === 'full' && (
+                                    <div className="animate-fade-in overflow-hidden border border-gray-200 rounded-lg shadow-sm bg-white">
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full text-sm text-center">
+                                                <thead className="bg-gray-100">
+                                                    <tr>
+                                                        <th className="p-2 border-b border-r sticky left-0 bg-gray-100 z-10 w-24">姓名</th>
+                                                        {scheduleData.headers.map((h, i) => (
+                                                            <th key={i} className="p-2 border-b min-w-[40px] text-xs">
+                                                                {h.replace('(', '<br/>(').split('<br/>').map((x, xi) => <div key={xi}>{x}</div>)}
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {scheduleData.data.map((row, rIdx) => (
+                                                        <tr key={rIdx} className="hover:bg-gray-50">
+                                                            <td className="p-2 border-b border-r sticky left-0 bg-white z-10 font-medium text-gray-700">
+                                                                {row[2]}
+                                                            </td>
+                                                            {scheduleData.headers.map((_, cIdx) => {
+                                                                const shift = row[3 + cIdx];
+                                                                const isOff = ["O", "H", "U", "OFF"].includes(shift);
+                                                                return (
+                                                                    <td key={cIdx} className={`p-1 border-b ${isOff ? 'text-gray-300' : 'text-gray-800 font-medium'}`}>
+                                                                        {shift}
+                                                                    </td>
+                                                                );
+                                                            })}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </main>
+
+                    <footer className="bg-white border-t border-gray-200 p-4 text-center text-xs text-gray-400 mt-auto">
+                        © 2026 線上排班系統 | 資料來源: Google Sheets
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+        
+        setTimeout(() => {
+            if(window.lucide) window.lucide.createIcons();
+        }, 500);
+    </script>
 </body>
 </html>
