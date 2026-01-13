@@ -321,61 +321,67 @@
             this.init();
         },
         methods: {
-            async init() {
-    this.loading = true;
-    this.errorMsg = '';
-    
-    // 除錯訊息：確認網址是否正確
-    console.log("正在連線至:", GAS_API_URL);
+           async init() {
+                this.loading = true;
+                this.errorMsg = '';
+                
+                // 1. 清理網址：去除前後可能不小心複製到的空白
+                const cleanUrl = GAS_API_URL.trim();
+                console.log("🚀 準備連線至:", cleanUrl);
 
-    try {
-        const url = new URL(GAS_API_URL);
-        url.searchParams.set('op', 'get_months');
+                try {
+                    // 2. 建構網址參數
+                    const url = new URL(cleanUrl);
+                    url.searchParams.set('op', 'get_months');
+                    
+                    // 顯示最終請求的完整網址，請在 Console 確認這個網址點進去是否能看
+                    console.log("🔗 完整請求網址:", url.toString());
 
-        // Google Apps Script 需要 redirect: 'follow'
-        const res = await fetch(url.toString(), { 
-            method: "GET",
-            redirect: 'follow' 
-            // 注意：不要加 mode: 'no-cors'，那樣會拿不到資料
-        });
-        
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        
-        // --- 修改開始：先讀取文字，再解析 JSON，以便除錯 ---
-        const textData = await res.text();
-        // 在瀏覽器的 Console (F12) 顯示回傳的原始資料
-        console.log("API 回傳原始資料:", textData); 
+                    // 3. 發送請求
+                    const res = await fetch(url.toString(), { 
+                        method: 'GET',
+                        redirect: 'follow'
+                    });
+                    
+                    console.log("📡 HTTP 狀態碼:", res.status);
 
-        let json;
-        try {
-            json = JSON.parse(textData);
-        } catch (e) {
-            // 如果解析失敗，通常是因為回傳了 HTML (權限錯誤頁面)
-            if (textData.includes("Google Sign-in") || textData.includes("<!DOCTYPE html>")) {
-                throw new Error("權限不足：請檢查 GAS 部署設定是否為「任何人 (Anyone)」");
-            }
-            throw new Error("資料格式錯誤 (非 JSON)，請查看 Console");
-        }
-        // --- 修改結束 ---
-        
-        if (json.status === 'success') {
-            this.sheetList = json.data;
-            if (this.sheetList.length > 0) {
-                this.currentSheet = this.sheetList[this.sheetList.length - 1];
-                await this.fetchScheduleData();
-            } else {
-                this.errorMsg = "找不到任何月份資料";
-                this.loading = false;
-            }
-        } else {
-            throw new Error(json.message || "未知的 API 錯誤");
-        }
-    } catch (e) {
-        console.error("Init Error Details:", e);
-        this.errorMsg = "連線失敗：" + e.message;
-        this.loading = false;
-    }
-},
+                    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                    
+                    // 4. 先讀成文字，避免 JSON 解析錯誤時看不到內容
+                    const textData = await res.text();
+                    console.log("📦 伺服器回傳原始資料:", textData);
+                    
+                    // 5. 嘗試解析 JSON
+                    let json;
+                    try {
+                        json = JSON.parse(textData);
+                    } catch (e) {
+                        // 如果回傳的是 HTML (通常是 Google 登入頁或錯誤頁)
+                        if (textData.includes("<!DOCTYPE html>")) {
+                            throw new Error("回傳了 HTML 而非 JSON，可能是網址錯誤或權限不足");
+                        }
+                        throw new Error("JSON 解析失敗: " + e.message);
+                    }
+                    
+                    // 6. 處理業務邏輯
+                    if (json.status === 'success') {
+                        this.sheetList = json.data;
+                        if (this.sheetList.length > 0) {
+                            this.currentSheet = this.sheetList[this.sheetList.length - 1];
+                            await this.fetchScheduleData();
+                        } else {
+                            this.errorMsg = "資料庫中找不到任何月份資料";
+                            this.loading = false;
+                        }
+                    } else {
+                        throw new Error(json.message || "未知的 API 錯誤");
+                    }
+                } catch (e) {
+                    console.error("❌ 詳細錯誤:", e);
+                    this.errorMsg = "讀取失敗：" + e.message;
+                    this.loading = false;
+                }
+            },
             async fetchScheduleData() {
                 this.loading = true;
                 this.allStaff = [];
@@ -530,4 +536,5 @@
 </body>
 
 </html>
+
 
