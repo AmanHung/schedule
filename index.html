@@ -222,6 +222,35 @@ D0,8,08:00~17:00,特殊D0`;
                 localStorage.setItem('lastSelectedPersonId', newId);
             };
 
+            // ==========================================
+            // SCROLL & AUTO-SELECT LOGIC (新增功能)
+            // ==========================================
+            const scrollRef = React.useRef(null);
+
+            // 捲動到指定 Day Index 的 Helper
+            const scrollToDay = (index) => {
+                setTimeout(() => {
+                    const container = scrollRef.current;
+                    const targetBtn = document.getElementById(`day-btn-${index}`);
+                    
+                    if (container && targetBtn) {
+                        // 計算讓按鈕置中的捲動位置
+                        const scrollLeft = targetBtn.offsetLeft - (container.clientWidth / 2) + (targetBtn.clientWidth / 2);
+                        container.scrollTo({ left: Math.max(0, scrollLeft), behavior: 'smooth' });
+                    }
+                }, 100); // 給予少許延遲確保 DOM 已渲染
+            };
+
+            // 監聽 Tab 切換：當切換回 'daily' 模式時，自動捲動到目前選取的日期
+            useEffect(() => {
+                if (activeTab === 'daily') {
+                    scrollToDay(selectedDayIndex);
+                }
+            }, [activeTab]);
+
+            // ==========================================
+            // FETCH DATA
+            // ==========================================
             useEffect(() => {
                 const fetchData = async () => {
                     setLoading(true);
@@ -277,12 +306,40 @@ D0,8,08:00~17:00,特殊D0`;
                 fetchData();
             }, [currentMonth]);
 
+            // 監聽月份或資料改變：判斷是否為當月，若是則預設選取今日
             useEffect(() => {
-                setSelectedDayIndex(0);
-            }, [currentMonth]);
+                if (scheduleData.headers.length === 0) return;
+
+                const today = new Date();
+                const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                
+                let targetIndex = 0;
+
+                // 如果選單選的月份 = 真實世界的當月
+                if (currentMonth === currentYearMonth) {
+                    const todayDate = today.getDate(); // 1-31
+                    
+                    // 在 headers (例如: "1(四)") 中尋找符合的日期
+                    const foundIndex = scheduleData.headers.findIndex(h => {
+                        const hDay = parseInt(h.replace(/[^0-9]/g, ''));
+                        return hDay === todayDate;
+                    });
+
+                    if (foundIndex !== -1) {
+                        targetIndex = foundIndex;
+                    }
+                }
+
+                // 更新選取狀態並捲動
+                setSelectedDayIndex(targetIndex);
+                if (activeTab === 'daily') {
+                    scrollToDay(targetIndex);
+                }
+
+            }, [scheduleData, currentMonth]);
 
             // ==========================================
-            // COLOR LOGIC 顏色邏輯 (已更新)
+            // COLOR LOGIC 顏色邏輯
             // ==========================================
             const getShiftStyle = (code) => {
                 const c = (code || "").trim().toUpperCase();
@@ -384,7 +441,6 @@ D0,8,08:00~17:00,特殊D0`;
                         <div className="flex bg-blue-800 p-1 rounded-lg">
                             <button onClick={() => setActiveTab('daily')} className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'daily' ? 'bg-white text-blue-800 shadow' : 'text-blue-200 hover:text-white'}`}>每日人員</button>
                             <button onClick={() => setActiveTab('personal')} className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'personal' ? 'bg-white text-blue-800 shadow' : 'text-blue-200 hover:text-white'}`}>個人班表</button>
-                            {/* 移除了總表檢視按鈕 */}
                         </div>
                     </header>
 
@@ -400,10 +456,14 @@ D0,8,08:00~17:00,特殊D0`;
                                 {/* VIEW: DAILY (每日檢視) */}
                                 {activeTab === 'daily' && scheduleData.headers.length > 0 && (
                                     <div className="animate-fade-in">
-                                        <div className="flex overflow-x-auto pb-4 gap-2 hide-scrollbar mb-4 -mx-4 px-4 bg-gray-50 pt-2 border-b">
+                                        <div 
+                                            ref={scrollRef}
+                                            className="flex overflow-x-auto pb-4 gap-2 hide-scrollbar mb-4 -mx-4 px-4 bg-gray-50 pt-2 border-b"
+                                        >
                                             {scheduleData.headers.map((dayLabel, idx) => (
                                                 <button
                                                     key={idx}
+                                                    id={`day-btn-${idx}`}
                                                     onClick={() => setSelectedDayIndex(idx)}
                                                     className={`flex-shrink-0 w-14 h-16 flex flex-col items-center justify-center rounded-lg border transition-all ${
                                                         selectedDayIndex === idx 
@@ -458,7 +518,6 @@ D0,8,08:00~17:00,特殊D0`;
                                                             </div>
                                                             <div className="flex-grow p-3 flex flex-wrap gap-2 items-center bg-white/30">
                                                                 {dayShifts[shiftCode].map(name => (
-                                                                    /* 字體放大修改處： text-xl font-bold px-4 py-2 */
                                                                     <span key={name} className="bg-white border border-black/10 px-4 py-2 rounded-full text-xl font-bold text-gray-800 shadow-sm">
                                                                         {name}
                                                                     </span>
@@ -472,7 +531,7 @@ D0,8,08:00~17:00,特殊D0`;
                                     </div>
                                 )}
 
-                                {/* VIEW: PERSONAL (個人檢視 - 已優化) */}
+                                {/* VIEW: PERSONAL (個人檢視) */}
                                 {activeTab === 'personal' && (
                                     <div className="animate-fade-in">
                                         
@@ -560,7 +619,6 @@ D0,8,08:00~17:00,特殊D0`;
                                                     {/* 個人資訊卡 */}
                                                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex justify-between items-center">
                                                         <div>
-                                                            {/* 字體放大：text-2xl font-black */}
                                                             <h2 className="text-2xl font-black text-gray-800">{person[2]}</h2>
                                                             <p className="text-sm text-gray-500">ID: {person[1]}</p>
                                                         </div>
