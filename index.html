@@ -201,8 +201,16 @@ D0,8,08:00~17:00,特殊D0`;
             
             const [modalShift, setModalShift] = useState(null);
 
-            const monthOptions = useMemo(() => generateMonthOptions(), []);
-            const [selectedDayIndex, setSelectedDayIndex] = useState(0);
+            // 新增：處理月份切換 (offset 為 -1 或 1)
+            const handleMonthChange = (offset) => {
+                const [year, month] = currentMonth.split('-').map(Number);
+                // 建立日期物件 (注意：月份是 0-11，所以要減 1)
+                const date = new Date(year, month - 1 + offset, 1);
+                
+                const newYear = date.getFullYear();
+                const newMonth = String(date.getMonth() + 1).padStart(2, '0');
+                setCurrentMonth(`${newYear}-${newMonth}`);
+            };
             
             // Personal View State
             const [selectedPersonId, setSelectedPersonId] = useState("");
@@ -430,13 +438,27 @@ D0,8,08:00~17:00,特殊D0`;
                                 <i data-lucide="calendar"></i>
                                 線上排班系統
                             </h1>
-                            <select 
-                                value={currentMonth} 
-                                onChange={(e) => setCurrentMonth(e.target.value)}
-                                className="bg-blue-700 text-white border border-blue-500 rounded px-2 py-1 text-sm focus:outline-none"
-                            >
-                                {monthOptions.map(m => <option key={m} value={m}>{m}</option>)}
-                            </select>
+                           <div className="flex items-center bg-blue-800/50 rounded-lg p-0.5 border border-blue-500/30">
+    <button 
+        onClick={() => handleMonthChange(-1)}
+        className="p-1.5 hover:bg-blue-700 rounded-md text-blue-100 hover:text-white transition-colors"
+        title="上個月"
+    >
+        <i data-lucide="chevron-left" className="w-5 h-5"></i>
+    </button>
+    
+    <span className="mx-2 font-bold text-white tracking-wider min-w-[80px] text-center">
+        {currentMonth}
+    </span>
+    
+    <button 
+        onClick={() => handleMonthChange(1)}
+        className="p-1.5 hover:bg-blue-700 rounded-md text-blue-100 hover:text-white transition-colors"
+        title="下個月"
+    >
+        <i data-lucide="chevron-right" className="w-5 h-5"></i>
+    </button>
+</div>
                         </div>
                         <div className="flex bg-blue-800 p-1 rounded-lg">
                             <button onClick={() => setActiveTab('daily')} className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${activeTab === 'daily' ? 'bg-white text-blue-800 shadow' : 'text-blue-200 hover:text-white'}`}>每日人員</button>
@@ -719,4 +741,5 @@ D0,8,08:00~17:00,特殊D0`;
     </script>
 </body>
 </html>
+
 
