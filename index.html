@@ -21,7 +21,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useMemo, useRef } = React;
 
         // ==========================================
         // CONFIGURATION 設定區
@@ -34,45 +34,26 @@
         // HOLIDAYS 2026 (民國115年) 國定假日設定
         // ==========================================
         const HOLIDAYS = {
-            // 1. 元旦
             "2026-01-01": "元旦",
-            
-            // 2. 農曆春節 (9天連假: 2/14-2/22)
             "2026-02-16": "除夕",
             "2026-02-17": "春節",
             "2026-02-18": "初二",
             "2026-02-19": "初三",
-            "2026-02-20": "春節補假", // 小年夜逢週日之補假
-            
-            // 3. 和平紀念日 (3天連假: 2/27-3/1)
-            "2026-02-27": "和平紀念日補假", // 2/28逢週六，週五補假
+            "2026-02-20": "春節補假",
+            "2026-02-27": "和平紀念日補假",
             "2026-02-28": "和平紀念日",
-
-            // 4. 兒童節與清明節 (4天連假: 4/3-4/6)
-            "2026-04-03": "兒童節補假",     // 4/4逢週六，週五補假
+            "2026-04-03": "兒童節補假",
             "2026-04-04": "兒童節",
             "2026-04-05": "清明節",
-            "2026-04-06": "清明節補假",     // 4/5逢週日，週一補假
-
-            // 5. 勞動節 (3天連假: 5/1-5/3)
+            "2026-04-06": "清明節補假",
             "2026-05-01": "勞動節",
-
-            // 6. 端午節 (3天連假: 6/19-6/21)
             "2026-06-19": "端午節",
-
-            // 7. 中秋節與教師節 (4天連假: 9/25-9/28)
             "2026-09-25": "中秋節",
             "2026-09-28": "教師節",
-
-            // 8. 國慶日 (3天連假: 10/9-10/11)
-            "2026-10-09": "國慶日補假", // 10/10逢週六，週五補假
+            "2026-10-09": "國慶日補假",
             "2026-10-10": "國慶日",
-
-            // 9. 台灣光復節 (3天連假: 10/24-10/26)
             "2026-10-25": "光復節",
-            "2026-10-26": "光復節補假", // 10/25逢週日，週一補假
-
-            // 10. 行憲紀念日 (3天連假: 12/25-12/27)
+            "2026-10-26": "光復節補假",
             "2026-12-25": "行憲紀念日"
         };
 
@@ -231,7 +212,7 @@ D0,8,08:00~17:00,特殊D0`;
             
             const [modalShift, setModalShift] = useState(null);
 
-            // 修改：安全的月份切換函式
+            // 安全的月份切換函式
             const handleMonthChange = (offset) => {
                 setCurrentMonth(prev => {
                     const [year, month] = prev.split('-').map(Number);
@@ -247,6 +228,10 @@ D0,8,08:00~17:00,特殊D0`;
             // Personal View State
             const [selectedPersonId, setSelectedPersonId] = useState("");
 
+            // Touch Swipe State
+            const [touchStart, setTouchStart] = useState(null);
+            const [touchEnd, setTouchEnd] = useState(null);
+
             useEffect(() => {
                 const savedId = localStorage.getItem('lastSelectedPersonId');
                 if (savedId) {
@@ -261,16 +246,14 @@ D0,8,08:00~17:00,特殊D0`;
             };
 
             // ==========================================
-            // DATE STYLE LOGIC 日期樣式邏輯 (新增)
+            // DATE STYLE LOGIC 日期樣式邏輯
             // ==========================================
             const getDateStyleInfo = (headerStr, currentMonth) => {
-                // headerStr 範例: "1(四)"
                 if (!headerStr) return { type: 'normal', colorClass: 'text-gray-600' };
 
                 const dayNum = headerStr.replace(/[^0-9]/g, '');
                 const fullDate = `${currentMonth}-${dayNum.padStart(2, '0')}`;
                 
-                // 1. 檢查是否為國定假日
                 if (HOLIDAYS[fullDate]) {
                     return { 
                         type: 'holiday', 
@@ -280,7 +263,6 @@ D0,8,08:00~17:00,特殊D0`;
                     };
                 }
 
-                // 2. 檢查是否為週六或週日
                 if (headerStr.includes('六')) {
                     return { 
                         type: 'weekend-sat', 
@@ -296,7 +278,6 @@ D0,8,08:00~17:00,特殊D0`;
                     };
                 }
 
-                // 3. 一般日
                 return { 
                     type: 'normal', 
                     colorClass: 'text-gray-600', 
@@ -305,7 +286,7 @@ D0,8,08:00~17:00,特殊D0`;
             };
 
             // ==========================================
-            // SCROLL & AUTO-SELECT LOGIC
+            // SCROLL & SWIPE LOGIC
             // ==========================================
             const scrollRef = React.useRef(null);
 
@@ -326,6 +307,41 @@ D0,8,08:00~17:00,特殊D0`;
                     scrollToDay(selectedDayIndex);
                 }
             }, [activeTab]);
+
+            // Touch Handlers for Swipe
+            const minSwipeDistance = 50; 
+
+            const onTouchStart = (e) => {
+                setTouchEnd(null); // Reset touch end to prevent jumpy behavior
+                setTouchStart(e.targetTouches[0].clientX);
+            };
+
+            const onTouchMove = (e) => {
+                setTouchEnd(e.targetTouches[0].clientX);
+            };
+
+            const onTouchEnd = () => {
+                if (!touchStart || !touchEnd) return;
+                const distance = touchStart - touchEnd;
+                const isLeftSwipe = distance > minSwipeDistance;
+                const isRightSwipe = distance < -minSwipeDistance;
+
+                if (isLeftSwipe) {
+                    // Swipe Left -> Next Day
+                    if (selectedDayIndex < scheduleData.headers.length - 1) {
+                        setSelectedDayIndex(prev => prev + 1);
+                    }
+                }
+                if (isRightSwipe) {
+                    // Swipe Right -> Prev Day
+                    if (selectedDayIndex > 0) {
+                        setSelectedDayIndex(prev => prev - 1);
+                    }
+                }
+                // Reset (optional, but good practice)
+                setTouchStart(null);
+                setTouchEnd(null);
+            };
 
             // ==========================================
             // FETCH DATA
@@ -419,22 +435,10 @@ D0,8,08:00~17:00,特殊D0`;
             const getShiftStyle = (code) => {
                 const c = (code || "").trim().toUpperCase();
                 
-                // 1. 淺粉紅色：班別 O, H, N, -, D0
-                if (["O", "H", "N", "-", "D0"].includes(c)) {
-                    return "bg-pink-50 text-pink-700 border-pink-200";
-                }
-                // 2. 淺藍色：班別 HA, NN, A。以及含有 "P" 字母
-                if (["HA", "NN", "A"].includes(c) || c.includes("P")) {
-                    return "bg-blue-50 text-blue-700 border-blue-200";
-                }
-                // 3. 淺綠色：班別含有 "S", "C" 字母
-                if (c.includes("S") || c.includes("C")) {
-                    return "bg-green-50 text-green-700 border-green-200";
-                }
-                // 4. 淺黃色：含有 "D", "U" 字母
-                if (c.includes("D") || c.includes("U")) {
-                    return "bg-yellow-50 text-yellow-700 border-yellow-200";
-                }
+                if (["O", "H", "N", "-", "D0"].includes(c)) return "bg-pink-50 text-pink-700 border-pink-200";
+                if (["HA", "NN", "A"].includes(c) || c.includes("P")) return "bg-blue-50 text-blue-700 border-blue-200";
+                if (c.includes("S") || c.includes("C")) return "bg-green-50 text-green-700 border-green-200";
+                if (c.includes("D") || c.includes("U")) return "bg-yellow-50 text-yellow-700 border-yellow-200";
                 return "bg-white border-gray-200 text-gray-700";
             };
 
@@ -450,31 +454,18 @@ D0,8,08:00~17:00,特殊D0`;
 
             const getTodayInfo = (personRow) => {
                 if (!personRow || !scheduleData.headers) return null;
-                
                 const today = new Date();
                 const todayYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-                
-                if (currentMonth !== todayYearMonth) {
-                    return { isToday: false, msg: "非當月資料" };
-                }
-
+                if (currentMonth !== todayYearMonth) return { isToday: false, msg: "非當月資料" };
                 const dayOfMonth = today.getDate(); 
                 const headerIndex = scheduleData.headers.findIndex(h => {
                     const hDay = parseInt(h.replace(/[^0-9]/g, ''));
                     return hDay === dayOfMonth;
                 });
-
                 if (headerIndex === -1) return { isToday: false, msg: "無今日資料" };
-
                 const shiftCode = personRow[3 + headerIndex];
                 const shiftInfo = getShiftInfo(shiftCode);
-                
-                return { 
-                    isToday: true, 
-                    dateStr: `${today.getMonth() + 1}/${dayOfMonth}`,
-                    shiftCode,
-                    shiftInfo 
-                };
+                return { isToday: true, dateStr: `${today.getMonth() + 1}/${dayOfMonth}`, shiftCode, shiftInfo };
             };
 
             return (
@@ -528,6 +519,7 @@ D0,8,08:00~17:00,特殊D0`;
                                     {/* VIEW: DAILY (每日檢視) */}
                                     {activeTab === 'daily' && scheduleData.headers.length > 0 && (
                                         <div className="animate-fade-in">
+                                            {/* Date Slider */}
                                             <div 
                                                 ref={scrollRef}
                                                 className="flex overflow-x-auto pb-4 gap-2 hide-scrollbar mb-4 -mx-4 px-4 bg-gray-50 pt-2 border-b"
@@ -547,11 +539,9 @@ D0,8,08:00~17:00,特殊D0`;
                                                                 : `${dateStyle.bgClass} ${dateStyle.colorClass} hover:border-blue-300`
                                                             }`}
                                                         >
-                                                            {/* 若為假日，顯示小紅點提示 */}
                                                             {dateStyle.type === 'holiday' && !isSelected && (
                                                                 <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
                                                             )}
-                                                            
                                                             <span className={`text-xs ${isSelected ? 'opacity-80' : 'opacity-70'}`}>
                                                                 {dayLabel.replace(/[0-9]/g, '')}
                                                             </span>
@@ -563,19 +553,32 @@ D0,8,08:00~17:00,特殊D0`;
                                                 })}
                                             </div>
 
-                                            <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
-                                                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2 text-sm">
-                                                    {scheduleData.headers[selectedDayIndex]}
-                                                </span>
-                                                {(() => {
-                                                    const info = getDateStyleInfo(scheduleData.headers[selectedDayIndex], currentMonth);
-                                                    if(info.type === 'holiday') return <span className="mr-2 text-red-600 bg-red-100 px-2 py-0.5 rounded text-xs">{info.label}</span>;
-                                                    return null;
-                                                })()}
-                                                當日排班狀況
-                                            </h2>
+                                            <div className="flex justify-between items-end mb-4">
+                                                <h2 className="text-lg font-bold text-gray-800 flex items-center">
+                                                    <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2 text-sm">
+                                                        {scheduleData.headers[selectedDayIndex]}
+                                                    </span>
+                                                    {(() => {
+                                                        const info = getDateStyleInfo(scheduleData.headers[selectedDayIndex], currentMonth);
+                                                        if(info.type === 'holiday') return <span className="mr-2 text-red-600 bg-red-100 px-2 py-0.5 rounded text-xs">{info.label}</span>;
+                                                        return null;
+                                                    })()}
+                                                    當日排班
+                                                </h2>
+                                                {/* 手機版滑動提示 */}
+                                                <div className="text-[10px] text-gray-400 md:hidden flex items-center">
+                                                    <i data-lucide="move-horizontal" className="w-3 h-3 mr-1"></i>
+                                                    左右滑動換頁
+                                                </div>
+                                            </div>
 
-                                            <div className="flex flex-col gap-2">
+                                            {/* Daily Content Area with Touch Listeners */}
+                                            <div 
+                                                className="flex flex-col gap-2 min-h-[300px]"
+                                                onTouchStart={onTouchStart}
+                                                onTouchMove={onTouchMove}
+                                                onTouchEnd={onTouchEnd}
+                                            >
                                                 {(() => {
                                                     const dayShifts = {};
                                                     scheduleData.data.forEach(person => {
@@ -594,7 +597,7 @@ D0,8,08:00~17:00,特殊D0`;
                                                         return idxA - idxB;
                                                     });
 
-                                                    if (sortedShifts.length === 0) return <div className="text-gray-400 text-center py-8 bg-gray-50 rounded-lg">本日無排班資料</div>;
+                                                    if (sortedShifts.length === 0) return <div className="text-gray-400 text-center py-16 bg-gray-50 rounded-lg border border-dashed border-gray-200">本日無排班資料</div>;
 
                                                     return sortedShifts.map(shiftCode => {
                                                         const isOff = ["O", "H", "U", "OFF", "-"].includes(shiftCode);
@@ -602,7 +605,7 @@ D0,8,08:00~17:00,特殊D0`;
                                                             <div 
                                                                 key={shiftCode} 
                                                                 onClick={() => handleShiftClick(shiftCode)}
-                                                                className={`flex items-stretch rounded-lg border transition-colors cursor-pointer hover:shadow-md active:scale-[0.99] ${getShiftStyle(shiftCode)} ${isOff ? 'opacity-80' : ''}`}
+                                                                className={`flex items-stretch rounded-lg border transition-colors cursor-pointer hover:shadow-md active:scale-[0.99] select-none ${getShiftStyle(shiftCode)} ${isOff ? 'opacity-80' : ''}`}
                                                             >
                                                                 <div className="w-20 flex-shrink-0 flex items-center justify-center border-r border-black/5 bg-black/5 font-bold text-xl p-2">
                                                                     {shiftCode}
@@ -760,9 +763,6 @@ D0,8,08:00~17:00,特殊D0`;
                                                                                     </span>
                                                                                 )}
 
-                                                                                {/* 如果不是假日，顯示跳轉箭頭 
-                                                                                 (若同時有假日label和箭頭會太擠，所以互斥顯示)
-                                                                                */}
                                                                                 {dateStyle.type !== 'holiday' && (
                                                                                     <i data-lucide="arrow-up-right" className="w-3 h-3 text-blue-300 opacity-0 group-hover:opacity-100 transition-opacity mr-1"></i>
                                                                                 )}
