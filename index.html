@@ -209,10 +209,10 @@
     // 設定區
     // ==========================================
     
-    // 【請再次確認】這裡填入你的 GAS Web App 網址 (結尾是 /exec)
-   const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbw1yyWwV2yGjBR3ZSd62W1KyQCt5ER9MM5QXcNmTQ8io0JWHOGX66FMN4r5ocw7BQ/exec';
+    // 你的 API 網址 (語法正確)
+    const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbw1yyWwV2yGjBR3ZSd62W1KyQCt5ER9MM5QXcNmTQ8io0JWHOGX66FMN4r5ocw7BQ/exec';
 
-    // 班別資料庫 (整合自你的 CSV)
+    // 班別資料庫
     const SHIFT_DATA = {
         'D':   { style: 'bg-blue-100 text-blue-800', hours: 8, time: '08:00~17:30', desc: '正常班' },
         'D-':  { style: 'bg-blue-100 text-blue-800', hours: 8, time: '08:30~17:00', desc: '正常班變形' },
@@ -321,32 +321,43 @@
             this.init();
         },
         methods: {
+            // 使用更穩定的文字串接方式，避免 URL Object 的相容性問題
             async init() {
                 this.loading = true;
                 this.errorMsg = '';
                 try {
-                    // 使用 URL 物件來確保網址格式正確
-                    const url = new URL(GAS_API_URL);
-                    url.searchParams.set('op', 'get_months');
-
-                    const res = await fetch(url.toString(), { redirect: 'follow' });
+                    // 直接串接字串，最簡單暴力
+                    const fetchUrl = GAS_API_URL + '?op=get_months';
                     
-                    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                    console.log("正在連線到:", fetchUrl);
                     
-                    const json = await res.json();
+                    // redirect: 'follow' 是關鍵，因為 GAS 會轉址
+                    const res = await fetch(fetchUrl, { redirect: 'follow' });
                     
-                    if (json.status === 'success') {
-                        this.sheetList = json.data;
-                        if (this.sheetList.length > 0) {
-                            this.currentSheet = this.sheetList[this.sheetList.length - 1];
-                            await this.fetchScheduleData();
+                    if (!res.ok) throw new Error(`HTTP 錯誤! 狀態碼: ${res.status}`);
+                    
+                    // 先讀成文字，避免直接轉 JSON 失敗看不到內容
+                    const textData = await res.text();
+                    
+                    try {
+                        const json = JSON.parse(textData);
+                        if (json.status === 'success') {
+                            this.sheetList = json.data;
+                            if (this.sheetList.length > 0) {
+                                this.currentSheet = this.sheetList[this.sheetList.length - 1];
+                                await this.fetchScheduleData();
+                            } else {
+                                this.errorMsg = "讀取成功，但找不到任何月份資料";
+                                this.loading = false;
+                            }
                         } else {
-                            this.errorMsg = "找不到任何月份資料";
-                            this.loading = false;
+                            throw new Error(json.message || "API 回傳錯誤");
                         }
-                    } else {
-                        throw new Error(json.message || "未知的 API 錯誤");
+                    } catch (parseError) {
+                        console.error("解析 JSON 失敗，原始內容:", textData);
+                        throw new Error("資料格式錯誤 (非 JSON)，請看 Console");
                     }
+
                 } catch (e) {
                     console.error("Init Error:", e);
                     this.errorMsg = "連線失敗：" + e.message;
@@ -358,12 +369,10 @@
                 this.loading = true;
                 this.allStaff = [];
                 try {
-                    const url = new URL(GAS_API_URL);
-                    url.searchParams.set('op', 'get_data');
-                    url.searchParams.set('sheet', this.currentSheet);
-
-                    const res = await fetch(url.toString(), { redirect: 'follow' });
-                    const json = await res.json();
+                    const fetchUrl = GAS_API_URL + '?op=get_data&sheet=' + encodeURIComponent(this.currentSheet);
+                    const res = await fetch(fetchUrl, { redirect: 'follow' });
+                    const textData = await res.text();
+                    const json = JSON.parse(textData);
 
                     if (json.status === 'success') {
                         this.parseData(json.data);
@@ -506,4 +515,5 @@
     });
 </script>
 </body>
+
 </html>
