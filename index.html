@@ -26,7 +26,6 @@
         // ==========================================
         // CONFIGURATION 設定區
         // ==========================================
-        const USE_MOCK_DATA = false; 
         const GOOGLE_SPREADSHEET_ID = "1OfGyESqORhCNdQRm7kVQkF9jirkpZPO1FNnZxmzFIZc"; 
         const SHIFT_DEF_SHEET_NAME = "班別資料"; 
 
@@ -56,32 +55,6 @@
             "2026-10-26": "光復節補假",
             "2026-12-25": "行憲紀念日"
         };
-
-        // ==========================================
-        // MOCK DATA 模擬資料
-        // ==========================================
-        const MOCK_SHIFT_DEFS = `班別,時數,時間,說明
--,0,-:~-:,未排班
-A,8,15:45~00:15,"小夜班ER ,休息(15:45-16:00,0:00-0:15)"
-D,8,08:00~17:30,"正常班(0800~1200,1330~1730)"
-D6,8,08:30~17:00,"8:30-12:30,13:00-17:00"
-O,0,-:~-:,休假
-H,0,-:~-:,例假日
-TD,8,09:00~17:30,TD班
-DP1,10,08:00~20:30,"夜診(0800~1200,1330~1730,1830~2030)"
-RD,8,08:00~16:00,RD班
-U,0,-:~-:,特休
-S,4,08:00~12:00,半天班
-D0,8,08:00~17:00,特殊D0`;
-
-        const MOCK_SCHEDULE_2026_01 = `職稱,員工編號,姓名,1(四),2(五),3(六),4(日),5(一),6(二),7(三),8(四),9(五),10(六),11(日),12(一),13(二),14(三),15(四),16(五),17(六),18(日),19(一),20(二),21(三),22(四),23(五),24(六),25(日),26(一),27(二),28(三),29(四),30(五),31(六)
-排班負責人,2277,洪一仁,-,D,-,-,D,D,D,D,D,-,-,D,D,D,D,D,-,-,D,D,D,D,D,-,-,D,D,D,D,D,-
-一般同仁,116,吳惠珠,D,D6,C,-,D6,S1,D6,DP1,-,-,-,D6,S1,D6,D6,D6,-,-,D6,D6,D6,DP1,D6,-,-,D6,S1,D6,D6,D6,C
-一般同仁,2772,陳佳瑜,D,-,-,-,D,DP1,D,D,D,-,-,D,D,D,D,DP1,-,-,D,S2,D,D,S,-,-,D,D,D,D,S,HD
-一般同仁,4602,林聖雅,D8,TD,O,H,D8,D4,D4,O,TD,U,H,D6,D4,A,O,O,O,H,D4,TP1,RD,D4,D4,TS1,H,TD,SP,O,DP2,D4,U
-一般同仁,5035,陳妍蓁,D1,D2,O,H,D4,D3,D7,DP2,D1,O,H,D9,D5,SP,O,NN,U,H,D7,O,D6,O,TP1,C,H,ED,D4,TD,D4,SP,O
-一般同仁,5052,解志欽,NN,NN,O,H,O,NN,NN,NN,NN,O,H,D,D,D,D,D,O,H,NN,NN,NN,NN,NN,O,H,NN,NN,NN,NN,D0,O
-一般同仁,5233,陳凱微,D5,D3,O,H,D5,TS1,D1,RD,DP2,O,H,SP,SP,O,ED,D8,O,H,D5,D7,D4,TP1,TD,U,H,RD,D6,A,O,D2,O`;
 
         // ==========================================
         // HELPER FUNCTIONS 工具函式
@@ -353,32 +326,22 @@ D0,8,08:00~17:00,特殊D0`;
                     setScheduleData({ headers: [], data: [] });
 
                     try {
-                        let defsText, scheduleText;
+                        if (!GOOGLE_SPREADSHEET_ID) throw new Error("請設定 GOOGLE_SPREADSHEET_ID");
 
-                        if (USE_MOCK_DATA) {
-                            await new Promise(r => setTimeout(r, 500));
-                            defsText = MOCK_SHIFT_DEFS;
-                            scheduleText = currentMonth === "2026-01" ? MOCK_SCHEDULE_2026_01 : "";
-                            
-                            if (!scheduleText) throw new Error("模擬模式：僅提供 2026-01 資料範例。");
-                        } else {
-                            if (!GOOGLE_SPREADSHEET_ID) throw new Error("請設定 GOOGLE_SPREADSHEET_ID");
+                        const baseUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
+                        const defsUrl = `${baseUrl}&sheet=${encodeURIComponent(SHIFT_DEF_SHEET_NAME)}`;
+                        const scheduleUrl = `${baseUrl}&sheet=${encodeURIComponent(currentMonth)}`;
 
-                            const baseUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
-                            const defsUrl = `${baseUrl}&sheet=${encodeURIComponent(SHIFT_DEF_SHEET_NAME)}`;
-                            const scheduleUrl = `${baseUrl}&sheet=${encodeURIComponent(currentMonth)}`;
+                        const [resDefs, resSched] = await Promise.all([
+                            fetch(defsUrl),
+                            fetch(scheduleUrl)
+                        ]);
 
-                            const [resDefs, resSched] = await Promise.all([
-                                fetch(defsUrl),
-                                fetch(scheduleUrl)
-                            ]);
+                        if (!resDefs.ok) throw new Error("讀取班別資料失敗");
+                        if (!resSched.ok) throw new Error(`讀取 ${currentMonth} 班表失敗`);
 
-                            if (!resDefs.ok) throw new Error("讀取班別資料失敗");
-                            if (!resSched.ok) throw new Error(`讀取 ${currentMonth} 班表失敗`);
-
-                            defsText = await resDefs.text();
-                            scheduleText = await resSched.text();
-                        }
+                        const defsText = await resDefs.text();
+                        const scheduleText = await resSched.text();
 
                         if (scheduleText.includes("<!DOCTYPE html")) throw new Error("無法讀取資料，請檢查權限設定。");
 
