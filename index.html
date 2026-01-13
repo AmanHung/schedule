@@ -287,27 +287,29 @@ D0,8,08:00~17:00,特殊D0`;
             const getShiftStyle = (code) => {
                 const c = (code || "").trim().toUpperCase();
                 
-                // 1. 淺粉紅色：班別O, H, A, -, D0
-                if (["O", "H", "A", "-", "D0", ""].includes(c)) {
+                // 1. 淺粉紅色：班別 O, H, N, -, D0
+                // (注意：D0 在這裡先被抓出來，所以不會變成下面的黃色)
+                if (["O", "H", "N", "-", "D0"].includes(c)) {
                     return "bg-pink-50 text-pink-700 border-pink-200";
                 }
 
-                // 2. 淺綠色：班別含有"S", "C"字母 (優先)
+                // 2. 淺藍色：班別 HA, NN, A。以及含有 "P" 字母
+                if (["HA", "NN", "A"].includes(c) || c.includes("P")) {
+                    return "bg-blue-50 text-blue-700 border-blue-200";
+                }
+
+                // 3. 淺綠色：班別含有 "S", "C" 字母
                 if (c.includes("S") || c.includes("C")) {
                     return "bg-green-50 text-green-700 border-green-200";
                 }
 
-                // 3. 淺藍色：班別HA, NN, 以及含有"P"字母
-                if (["HA", "NN"].includes(c) || c.includes("P")) {
-                    return "bg-blue-50 text-blue-700 border-blue-200";
-                }
-
-                // 4. 淺黃色：含有"D", "U"字母
+                // 4. 淺黃色：含有 "D", "U" 字母
+                // (因為 D0 已經在第1點被 return，這裡只會處理 D1, D2, DU 等其他含有D的情況)
                 if (c.includes("D") || c.includes("U")) {
                     return "bg-yellow-50 text-yellow-700 border-yellow-200";
                 }
 
-                // Default
+                // Default (其他或是空白)
                 return "bg-white border-gray-200 text-gray-700";
             };
 
@@ -699,3 +701,4 @@ D0,8,08:00~17:00,特殊D0`;
     </script>
 </body>
 </html>
+
