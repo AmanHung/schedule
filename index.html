@@ -322,38 +322,60 @@
         },
         methods: {
             async init() {
-                this.loading = true;
-                this.errorMsg = '';
-                try {
-                    // 使用 URL 物件來確保網址格式正確
-                    const url = new URL(GAS_API_URL);
-                    url.searchParams.set('op', 'get_months');
+    this.loading = true;
+    this.errorMsg = '';
+    
+    // 除錯訊息：確認網址是否正確
+    console.log("正在連線至:", GAS_API_URL);
 
-                    const res = await fetch(url.toString(), { redirect: 'follow' });
-                    
-                    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-                    
-                    const json = await res.json();
-                    
-                    if (json.status === 'success') {
-                        this.sheetList = json.data;
-                        if (this.sheetList.length > 0) {
-                            this.currentSheet = this.sheetList[this.sheetList.length - 1];
-                            await this.fetchScheduleData();
-                        } else {
-                            this.errorMsg = "找不到任何月份資料";
-                            this.loading = false;
-                        }
-                    } else {
-                        throw new Error(json.message || "未知的 API 錯誤");
-                    }
-                } catch (e) {
-                    console.error("Init Error:", e);
-                    this.errorMsg = "連線失敗：" + e.message;
-                    this.loading = false;
-                }
-            },
+    try {
+        const url = new URL(GAS_API_URL);
+        url.searchParams.set('op', 'get_months');
 
+        // Google Apps Script 需要 redirect: 'follow'
+        const res = await fetch(url.toString(), { 
+            method: "GET",
+            redirect: 'follow' 
+            // 注意：不要加 mode: 'no-cors'，那樣會拿不到資料
+        });
+        
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        
+        // --- 修改開始：先讀取文字，再解析 JSON，以便除錯 ---
+        const textData = await res.text();
+        // 在瀏覽器的 Console (F12) 顯示回傳的原始資料
+        console.log("API 回傳原始資料:", textData); 
+
+        let json;
+        try {
+            json = JSON.parse(textData);
+        } catch (e) {
+            // 如果解析失敗，通常是因為回傳了 HTML (權限錯誤頁面)
+            if (textData.includes("Google Sign-in") || textData.includes("<!DOCTYPE html>")) {
+                throw new Error("權限不足：請檢查 GAS 部署設定是否為「任何人 (Anyone)」");
+            }
+            throw new Error("資料格式錯誤 (非 JSON)，請查看 Console");
+        }
+        // --- 修改結束 ---
+        
+        if (json.status === 'success') {
+            this.sheetList = json.data;
+            if (this.sheetList.length > 0) {
+                this.currentSheet = this.sheetList[this.sheetList.length - 1];
+                await this.fetchScheduleData();
+            } else {
+                this.errorMsg = "找不到任何月份資料";
+                this.loading = false;
+            }
+        } else {
+            throw new Error(json.message || "未知的 API 錯誤");
+        }
+    } catch (e) {
+        console.error("Init Error Details:", e);
+        this.errorMsg = "連線失敗：" + e.message;
+        this.loading = false;
+    }
+},
             async fetchScheduleData() {
                 this.loading = true;
                 this.allStaff = [];
@@ -506,4 +528,5 @@
     });
 </script>
 </body>
+
 </html>
