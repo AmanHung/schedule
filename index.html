@@ -31,7 +31,6 @@
         const USE_MOCK_DATA = false; 
 
         // 2. Google Sheet 設定 (當 USE_MOCK_DATA = false 時生效)
-        // 請將您的 Google Sheet ID 填入下方
         const GOOGLE_SPREADSHEET_ID = "1OfGyESqORhCNdQRm7kVQkF9jirkpZPO1FNnZxmzFIZc"; 
 
         // 3. 分頁名稱設定
@@ -51,7 +50,8 @@ TD,8,09:00~17:30,TD班
 DP1,10,08:00~20:30,"夜診(0800~1200,1330~1730,1830~2030)"
 RD,8,08:00~16:00,RD班
 U,0,-:~-:,特休
-S,4,08:00~12:00,半天班`;
+S,4,08:00~12:00,半天班
+D0,8,08:00~17:00,特殊D0`;
 
         const MOCK_SCHEDULE_2026_01 = `職稱,員工編號,姓名,1(四),2(五),3(六),4(日),5(一),6(二),7(三),8(四),9(五),10(六),11(日),12(一),13(二),14(三),15(四),16(五),17(六),18(日),19(一),20(二),21(三),22(四),23(五),24(六),25(日),26(一),27(二),28(三),29(四),30(五),31(六)
 排班負責人,2277,洪一仁,-,D,-,-,D,D,D,D,D,-,-,D,D,D,D,D,-,-,D,D,D,D,D,-,-,D,D,D,D,D,-
@@ -121,11 +121,10 @@ S,4,08:00~12:00,半天班`;
             return rows;
         };
 
-        // 修改：同時回傳定義物件與順序陣列
         const processShiftDefs = (csvText) => {
             const rows = parseCSV(csvText);
             const defs = {};
-            const order = []; // 用來儲存 CSV 中的出現順序
+            const order = [];
             
             for(let i=1; i<rows.length; i++) {
                 if (rows[i].length < 2) continue;
@@ -156,6 +155,7 @@ S,4,08:00~12:00,半天班`;
         // ==========================================
         const ShiftDetailModal = ({ shiftInfo, onClose }) => {
             if (!shiftInfo) return null;
+            
             return (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={onClose}>
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -200,13 +200,12 @@ S,4,08:00~12:00,半天班`;
             const [activeTab, setActiveTab] = useState("daily");
             
             const [shiftDefs, setShiftDefs] = useState({});
-            const [shiftOrder, setShiftOrder] = useState([]); // 新增：班別順序
+            const [shiftOrder, setShiftOrder] = useState([]);
             
             const [scheduleData, setScheduleData] = useState({ headers: [], data: [] });
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState(null);
             
-            // Modal State
             const [modalShift, setModalShift] = useState(null);
 
             const monthOptions = useMemo(() => generateMonthOptions(), []);
@@ -250,7 +249,6 @@ S,4,08:00~12:00,半天班`;
 
                         if (scheduleText.includes("<!DOCTYPE html")) throw new Error("無法讀取資料，請檢查權限設定。");
 
-                        // 處理班別定義與順序
                         const { defs, order } = processShiftDefs(defsText);
                         setShiftDefs(defs);
                         setShiftOrder(order);
@@ -274,12 +272,33 @@ S,4,08:00~12:00,半天班`;
                 setSelectedDayIndex(0);
             }, [currentMonth]);
 
-            // 調整 Style 邏輯，精簡版面更適合扁平化設計
+            // ==========================================
+            // COLOR LOGIC 顏色邏輯 (已調整順序)
+            // ==========================================
             const getShiftStyle = (code) => {
                 const c = (code || "").trim().toUpperCase();
-                if(["O", "H", "U", "OFF", "-", ""].includes(c)) return "bg-gray-50 text-gray-400 border-gray-200";
-                if(c.includes("N") || c.includes("P") || c === "A") return "bg-indigo-50 text-indigo-700 border-indigo-200";
-                if(c.includes("D") || c === "S") return "bg-amber-50 text-amber-700 border-amber-200";
+                
+                // 1. 淺粉紅色：班別O, H, A, -, D0
+                if (["O", "H", "A", "-", "D0", ""].includes(c)) {
+                    return "bg-pink-50 text-pink-700 border-pink-200";
+                }
+
+                // 2. 淺綠色：班別含有"S", "C"字母 (原順序3，現在提升為2)
+                if (c.includes("S") || c.includes("C")) {
+                    return "bg-green-50 text-green-700 border-green-200";
+                }
+
+                // 3. 淺藍色：班別HA, NN, A(已被R1攔截)。以及含有"P"字母 (原順序2，現在降為3)
+                if (["HA", "NN"].includes(c) || c.includes("P")) {
+                    return "bg-blue-50 text-blue-700 border-blue-200";
+                }
+
+                // 4. 淺黃色：含有"D", "U"字母
+                if (c.includes("D") || c.includes("U")) {
+                    return "bg-yellow-50 text-yellow-700 border-yellow-200";
+                }
+
+                // Default
                 return "bg-white border-gray-200 text-gray-700";
             };
 
@@ -372,11 +391,9 @@ S,4,08:00~12:00,半天班`;
                                                     dayShifts[shift].push(person[2]);
                                                 });
 
-                                                // 排序邏輯修改：依照 shiftOrder 順序
                                                 const sortedShifts = Object.keys(dayShifts).sort((a, b) => {
                                                     const idxA = shiftOrder.indexOf(a);
                                                     const idxB = shiftOrder.indexOf(b);
-                                                    // 如果不在定義列表中，排到最後
                                                     if(idxA === -1 && idxB === -1) return 0;
                                                     if(idxA === -1) return 1;
                                                     if(idxB === -1) return -1;
@@ -386,24 +403,23 @@ S,4,08:00~12:00,半天班`;
                                                 if (sortedShifts.length === 0) return <div className="text-gray-400 text-center py-8 bg-gray-50 rounded-lg">本日無排班資料</div>;
 
                                                 return sortedShifts.map(shiftCode => {
-                                                    const isOff = ["O", "H", "U", "OFF"].includes(shiftCode);
+                                                    const isOff = ["O", "H", "U", "OFF", "-"].includes(shiftCode);
                                                     
-                                                    // 新的 UI 結構：橫式簡潔版
                                                     return (
                                                         <div 
                                                             key={shiftCode} 
                                                             onClick={() => handleShiftClick(shiftCode)}
-                                                            className={`flex items-stretch rounded-lg border transition-colors cursor-pointer hover:shadow-md active:scale-[0.99] ${getShiftStyle(shiftCode)} ${isOff ? 'opacity-70 bg-gray-50' : 'bg-white'}`}
+                                                            className={`flex items-stretch rounded-lg border transition-colors cursor-pointer hover:shadow-md active:scale-[0.99] ${getShiftStyle(shiftCode)} ${isOff ? 'opacity-80' : ''}`}
                                                         >
-                                                            {/* 左側：班別代碼 (點擊區) */}
+                                                            {/* 左側：班別代碼 */}
                                                             <div className="w-20 flex-shrink-0 flex items-center justify-center border-r border-black/5 bg-black/5 font-bold text-xl p-2">
                                                                 {shiftCode}
                                                             </div>
                                                             
                                                             {/* 右側：人員列表 */}
-                                                            <div className="flex-grow p-3 flex flex-wrap gap-2 items-center">
+                                                            <div className="flex-grow p-3 flex flex-wrap gap-2 items-center bg-white/30">
                                                                 {dayShifts[shiftCode].map(name => (
-                                                                    <span key={name} className="bg-white border border-gray-200 px-3 py-1 rounded-full text-sm font-medium text-gray-700 shadow-sm">
+                                                                    <span key={name} className="bg-white border border-black/10 px-3 py-1 rounded-full text-sm font-medium text-gray-700 shadow-sm">
                                                                         {name}
                                                                     </span>
                                                                 ))}
@@ -416,7 +432,7 @@ S,4,08:00~12:00,半天班`;
                                     </div>
                                 )}
 
-                                {/* VIEW: PERSONAL (個人檢視 - 保持不變) */}
+                                {/* VIEW: PERSONAL */}
                                 {activeTab === 'personal' && (
                                     <div className="animate-fade-in">
                                         <div className="mb-6">
@@ -465,8 +481,8 @@ S,4,08:00~12:00,半天班`;
                                             
                                             let workDays = 0, offDays = 0;
                                             person.slice(3).forEach(s => {
-                                                if(["O", "H", "U", "OFF"].includes(s)) offDays++;
-                                                else if(s && s !== "-" && s !== "") workDays++;
+                                                if(["O", "H", "U", "OFF", "-"].includes(s)) offDays++;
+                                                else if(s && s !== "") workDays++;
                                             });
 
                                             return (
@@ -510,7 +526,7 @@ S,4,08:00~12:00,半天班`;
                                     </div>
                                 )}
 
-                                {/* VIEW: FULL TABLE (總表檢視 - 保持不變) */}
+                                {/* VIEW: FULL TABLE */}
                                 {activeTab === 'full' && (
                                     <div className="animate-fade-in overflow-hidden border border-gray-200 rounded-lg shadow-sm bg-white">
                                         <div className="overflow-x-auto">
@@ -531,7 +547,7 @@ S,4,08:00~12:00,半天班`;
                                                             <td className="p-2 border-b border-r sticky left-0 bg-white z-10 font-medium text-gray-700">{row[2]}</td>
                                                             {scheduleData.headers.map((_, cIdx) => {
                                                                 const shift = row[3 + cIdx];
-                                                                const isOff = ["O", "H", "U", "OFF"].includes(shift);
+                                                                const isOff = ["O", "H", "U", "OFF", "-"].includes(shift);
                                                                 return (
                                                                     <td key={cIdx} 
                                                                         className={`p-1 border-b cursor-pointer hover:bg-blue-50 ${isOff ? 'text-gray-300' : 'text-gray-800 font-medium'}`}
@@ -552,7 +568,6 @@ S,4,08:00~12:00,半天班`;
                         )}
                     </main>
 
-                    {/* Pop-up Modal */}
                     <ShiftDetailModal shiftInfo={modalShift} onClose={() => setModalShift(null)} />
 
                     <footer className="bg-white border-t border-gray-200 p-4 text-center text-xs text-gray-400 mt-auto">
