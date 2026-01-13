@@ -5,19 +5,15 @@ import { Clock, Info, X, Users, Calendar, ChevronRight } from 'lucide-react';
 // 1. 寫入您的 Google Sheet ID
 const SPREADSHEET_ID = "1OfGyESqORhCNdQRm7kVQkF9jirkpZPO1FNnZxmzFIZc";
 
-// 2. 移除模擬開關，預設即為正式模式的邏輯結構
-// 在實際 Google Apps Script 環境中，您會透過 google.script.run 獲取資料
-// 在此預覽環境中，我們使用靜態資料呈現效果
-
 const App = () => {
   const [shifts, setShifts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedShift, setSelectedShift] = useState(null);
 
-  // 模擬從後端獲取資料
+  // 模擬資料載入
   useEffect(() => {
-    // 這裡模擬從您的試算表讀取到的資料結構
     const fetchData = () => {
+      // 這裡放置模擬的資料，您可以直接修改這裡的內容來測試顯示
       setTimeout(() => {
         const mockData = [
           {
@@ -51,7 +47,7 @@ const App = () => {
         ];
         setShifts(mockData);
         setLoading(false);
-      }, 800);
+      }, 800); // 模擬載入延遲
     };
 
     fetchData();
