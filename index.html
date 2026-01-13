@@ -33,16 +33,14 @@
         const USE_MOCK_DATA = true; 
 
         // 2. Google Sheet 設定 (當 USE_MOCK_DATA = false 時生效)
-        // 請將您的 Google Sheet ID 填入下方 (從網址列複製 d/ 與 /edit 之間的字串)
-        // 範例網址: https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit
+        // 請將您的 Google Sheet ID 填入下方
         const GOOGLE_SPREADSHEET_ID = "您的_Google_Sheet_ID"; 
 
         // 3. 分頁名稱設定
-        // 請確保您的 Google Sheet 分頁名稱與此處設定一致
-        const SHIFT_DEF_SHEET_NAME = "班別資料"; // 存放班別定義的分頁名稱
+        const SHIFT_DEF_SHEET_NAME = "班別資料"; 
 
         // ==========================================
-        // MOCK DATA 模擬資料 (無需修改)
+        // MOCK DATA 模擬資料
         // ==========================================
         const MOCK_SHIFT_DEFS = `班別,時數,時間,說明
 -,0,-:~-:,未排班
@@ -70,7 +68,6 @@ S,4,08:00~12:00,半天班`;
         // HELPER FUNCTIONS 工具函式
         // ==========================================
         
-        // 產生月份列表 (目前年份 前後1.5年)
         const generateMonthOptions = () => {
             const options = [];
             const today = new Date();
@@ -84,7 +81,7 @@ S,4,08:00~12:00,半天班`;
                     options.push(monthStr);
                 }
             }
-            return options.reverse(); // 最近的月份在上面
+            return options.reverse();
         };
 
         const parseCSV = (text) => {
@@ -129,13 +126,13 @@ S,4,08:00~12:00,半天班`;
         const processShiftDefs = (csvText) => {
             const rows = parseCSV(csvText);
             const defs = {};
-            const order = []; // 用來記錄班別的出現順序
+            const order = []; 
             for(let i=1; i<rows.length; i++) {
                 if (rows[i].length < 2) continue;
                 const [code, hours, time, desc] = rows[i];
                 if(code) {
                     defs[code] = { hours, time, desc };
-                    order.push(code); // 記錄順序
+                    order.push(code); 
                 }
             }
             return { defs, order };
@@ -147,7 +144,11 @@ S,4,08:00~12:00,半天班`;
             if (headerRowIndex === -1) return { headers: [], data: [] };
 
             const headers = rows[headerRowIndex];
-            const data = rows.slice(headerRowIndex + 1).filter(row => row.length > 3 && row[2]); 
+            
+            // 修正：放寬過濾條件，只要有姓名欄位 (index 2) 就保留，避免漏掉資料
+            // 標題列通常有: 職稱(0), 員工編號(1), 姓名(2), 日期(3)...
+            // row.length >= 3 確保至少有基本資料，即使還沒排班也能顯示
+            const data = rows.slice(headerRowIndex + 1).filter(row => row.length >= 3 && row[2]); 
 
             const dateHeaders = headers.slice(3).map(h => h);
             return { headers: dateHeaders, data, rawHeaders: headers };
@@ -160,18 +161,13 @@ S,4,08:00~12:00,半天班`;
             const [currentMonth, setCurrentMonth] = useState("2026-01");
             const [activeTab, setActiveTab] = useState("daily");
             const [shiftDefs, setShiftDefs] = useState({});
-            const [shiftOrder, setShiftOrder] = useState([]); // 儲存班別順序
+            const [shiftOrder, setShiftOrder] = useState([]);
             const [scheduleData, setScheduleData] = useState({ headers: [], data: [] });
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState(null);
             
-            // 下拉選單選項 (自動生成)
             const monthOptions = useMemo(() => generateMonthOptions(), []);
-
-            // Daily View State
             const [selectedDayIndex, setSelectedDayIndex] = useState(0);
-
-            // Personal View State
             const [selectedPersonId, setSelectedPersonId] = useState("");
             const [searchTerm, setSearchTerm] = useState("");
 
@@ -179,7 +175,7 @@ S,4,08:00~12:00,半天班`;
                 const fetchData = async () => {
                     setLoading(true);
                     setError(null);
-                    setScheduleData({ headers: [], data: [] }); // Clear old data first
+                    setScheduleData({ headers: [], data: [] });
 
                     try {
                         let defsText, scheduleText;
@@ -197,8 +193,6 @@ S,4,08:00~12:00,半天班`;
                                 throw new Error("請先在程式碼中設定 GOOGLE_SPREADSHEET_ID");
                             }
 
-                            // 建構 Google Viz API URL
-                            // 格式: https://docs.google.com/spreadsheets/d/{ID}/gviz/tq?tqx=out:csv&sheet={SheetName}
                             const baseUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
                             const defsUrl = `${baseUrl}&sheet=${encodeURIComponent(SHIFT_DEF_SHEET_NAME)}`;
                             const scheduleUrl = `${baseUrl}&sheet=${encodeURIComponent(currentMonth)}`;
@@ -208,19 +202,17 @@ S,4,08:00~12:00,半天班`;
                                 fetch(scheduleUrl)
                             ]);
 
-                            if (!resDefs.ok) throw new Error("讀取班別資料失敗，請檢查分頁名稱是否為「" + SHIFT_DEF_SHEET_NAME + "」");
-                            if (!resSched.ok) throw new Error(`讀取 ${currentMonth} 班表失敗。請確認該月份分頁是否存在，且名稱正確 (例如: 2026-01)。`);
+                            if (!resDefs.ok) throw new Error("讀取班別資料失敗，請檢查分頁名稱");
+                            if (!resSched.ok) throw new Error(`讀取 ${currentMonth} 班表失敗，請確認分頁是否存在`);
 
                             defsText = await resDefs.text();
                             scheduleText = await resSched.text();
                         }
 
-                        // 檢查是否返回了 HTML (通常代表權限不足或分頁不存在)
                         if (scheduleText.trim().startsWith("<!DOCTYPE html") || scheduleText.includes("google-visualization-errors")) {
-                            throw new Error(`無法讀取 ${currentMonth} 資料。可能原因：\n1. 分頁尚未建立\n2. 分頁名稱錯誤\n3. 試算表未設定為「知道連結者可檢視」`);
+                            throw new Error(`無法讀取 ${currentMonth} 資料，請確認權限或分頁名稱。`);
                         }
 
-                        // 處理班別定義與順序
                         const processedDefs = processShiftDefs(defsText);
                         setShiftDefs(processedDefs.defs);
                         setShiftOrder(processedDefs.order);
@@ -259,7 +251,6 @@ S,4,08:00~12:00,半天班`;
                 return shiftDefs[cleanCode] || { time: "", desc: "" };
             };
 
-            // Loading View
             if (loading && !scheduleData.data.length) {
                 return (
                     <div className="flex items-center justify-center h-screen bg-gray-50 flex-col">
@@ -303,16 +294,6 @@ S,4,08:00~12:00,半天班`;
                                 <i data-lucide="alert-circle" className="mx-auto mb-2 w-8 h-8 text-red-500"></i>
                                 <h3 className="font-bold mb-2">無法讀取資料</h3>
                                 <p className="text-sm whitespace-pre-line">{error}</p>
-                                {!USE_MOCK_DATA && (
-                                    <div className="mt-4 text-xs text-left bg-white p-3 rounded border text-gray-600">
-                                        <strong>檢查清單：</strong>
-                                        <ul className="list-disc pl-5 mt-1 space-y-1">
-                                            <li>確認 Google Sheet 已設定「知道連結者可檢視」。</li>
-                                            <li>確認分頁名稱是否為 <code>{currentMonth}</code>。</li>
-                                            <li>確認 Sheet ID 是否正確。</li>
-                                        </ul>
-                                    </div>
-                                )}
                             </div>
                         ) : (
                             <>
@@ -354,11 +335,9 @@ S,4,08:00~12:00,半天班`;
                                                     dayShifts[shift].push(person[2]);
                                                 });
 
-                                                // 依據 shiftOrder (CSV 順序) 進行排序
                                                 const sortedShifts = Object.keys(dayShifts).sort((a, b) => {
                                                     const indexA = shiftOrder.indexOf(a);
                                                     const indexB = shiftOrder.indexOf(b);
-                                                    // 如果班別不在定義檔中，則排到最後，否則依 CSV 順序
                                                     return (indexA === -1 ? 9999 : indexA) - (indexB === -1 ? 9999 : indexB);
                                                 });
 
@@ -379,7 +358,6 @@ S,4,08:00~12:00,半天班`;
                                                                     {dayShifts[shiftCode].length} 人
                                                                 </span>
                                                             </div>
-                                                            {/* 說明內容已移除 */}
                                                             <div className="flex flex-wrap gap-2 mt-2">
                                                                 {dayShifts[shiftCode].map(name => (
                                                                     <span key={name} className="bg-white/50 px-2 py-1 rounded text-sm font-medium">
@@ -499,7 +477,6 @@ S,4,08:00~12:00,半天班`;
                                                                             </span>
                                                                             <span className="text-sm font-medium text-gray-700">{info.time}</span>
                                                                         </div>
-                                                                        {/* 說明內容已移除 */}
                                                                     </div>
                                                                 </div>
                                                             );
@@ -517,14 +494,14 @@ S,4,08:00~12:00,半天班`;
 
                                 {/* VIEW: FULL TABLE (總表檢視) */}
                                 {activeTab === 'full' && (
-                                    <div className="animate-fade-in overflow-hidden border border-gray-200 rounded-lg shadow-sm bg-white">
-                                        <div className="overflow-x-auto">
-                                            <table className="min-w-full text-sm text-center">
-                                                <thead className="bg-gray-100">
+                                    <div className="animate-fade-in border border-gray-200 rounded-lg shadow-sm bg-white flex flex-col h-full max-h-[80vh]">
+                                        <div className="overflow-auto flex-1">
+                                            <table className="min-w-full text-sm text-center border-collapse">
+                                                <thead className="bg-gray-100 sticky top-0 z-20 shadow-sm">
                                                     <tr>
-                                                        <th className="p-2 border-b border-r sticky left-0 bg-gray-100 z-10 w-24">姓名</th>
+                                                        <th className="p-2 border-b border-r sticky left-0 bg-gray-100 z-30 w-24">姓名</th>
                                                         {scheduleData.headers.map((h, i) => (
-                                                            <th key={i} className="p-2 border-b min-w-[40px] text-xs">
+                                                            <th key={i} className="p-2 border-b min-w-[45px] text-xs">
                                                                 {h.replace('(', '<br/>(').split('<br/>').map((x, xi) => <div key={xi}>{x}</div>)}
                                                             </th>
                                                         ))}
@@ -540,7 +517,7 @@ S,4,08:00~12:00,半天班`;
                                                                 const shift = row[3 + cIdx];
                                                                 const isOff = ["O", "H", "U", "OFF"].includes(shift);
                                                                 return (
-                                                                    <td key={cIdx} className={`p-1 border-b ${isOff ? 'text-gray-300' : 'text-gray-800 font-medium'}`}>
+                                                                    <td key={cIdx} className={`p-1 border-b min-w-[45px] ${isOff ? 'text-gray-300' : 'text-gray-800 font-medium'}`}>
                                                                         {shift}
                                                                     </td>
                                                                 );
