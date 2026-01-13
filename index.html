@@ -223,7 +223,7 @@ D0,8,08:00~17:00,特殊D0`;
             };
 
             // ==========================================
-            // SCROLL & AUTO-SELECT LOGIC (新增功能)
+            // SCROLL & AUTO-SELECT LOGIC
             // ==========================================
             const scrollRef = React.useRef(null);
 
@@ -549,7 +549,7 @@ D0,8,08:00~17:00,特殊D0`;
                                                     <option value="" disabled>請選擇人員...</option>
                                                     {scheduleData.data.map(p => (
                                                         <option key={p[1]} value={p[1]}>
-                                                            {p[2]} ({p[1]})
+                                                            {p[2]}
                                                         </option>
                                                     ))}
                                                 </select>
@@ -620,7 +620,6 @@ D0,8,08:00~17:00,特殊D0`;
                                                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex justify-between items-center">
                                                         <div>
                                                             <h2 className="text-2xl font-black text-gray-800">{person[2]}</h2>
-                                                            <p className="text-sm text-gray-500">ID: {person[1]}</p>
                                                         </div>
                                                         <div className="flex gap-4 text-sm">
                                                             <div className="text-center">
