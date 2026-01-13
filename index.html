@@ -15,7 +15,7 @@
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        /* 自定義 Select 樣式，讓它看起來像標題 */
+        /* 【關鍵修正】自定義 Select 樣式，讓它看起來像標題 */
         .title-select {
             appearance: none;
             background-color: transparent;
@@ -214,7 +214,7 @@
             // Personal View State
             const [selectedPersonId, setSelectedPersonId] = useState("");
             
-            // 【新增】對照用的第二人 ID
+            // 【關鍵修正】對照用的第二人 ID (確保這行有在程式碼中)
             const [comparePersonId, setComparePersonId] = useState("");
 
             // Touch Swipe State
@@ -444,7 +444,7 @@
                 return { isToday: true, dateStr: `${today.getMonth() + 1}/${dayOfMonth}`, shiftCode, shiftInfo };
             };
 
-            // 【新增】共用的日曆渲染函式
+            // 【關鍵修正】共用的日曆渲染函式 (確保這段程式碼存在)
             const renderCalendarGrid = (person, headers, startCol, onDayClick) => {
                 return (
                     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -743,7 +743,7 @@
                                                             </div>
                                                         )}
 
-                                                        {/* 【修改】合併後的姓名選擇與統計卡片 */}
+                                                        {/* 【關鍵修正】合併後的姓名選擇與統計卡片 (確認這個 div 有取代原本的 h2) */}
                                                         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex justify-between items-center">
                                                             <div className="relative">
                                                                 {/* 這裡把 h2 改成 Select */}
@@ -776,7 +776,7 @@
                                                             setActiveTab('daily');
                                                         })}
 
-                                                        {/* 【新增】對照其他同事班表區塊 */}
+                                                        {/* 【關鍵修正】對照其他同事班表區塊 (確認這塊存在) */}
                                                         <div className="pt-4 border-t border-gray-200 mt-8">
                                                             <h3 className="text-gray-600 font-bold mb-3 flex items-center">
                                                                 <i data-lucide="users" className="w-4 h-4 mr-2"></i>
