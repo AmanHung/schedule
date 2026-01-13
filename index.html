@@ -279,7 +279,7 @@ D0,8,08:00~17:00,特殊D0`;
                 const c = (code || "").trim().toUpperCase();
                 
                 // 1. 淺粉紅色：班別O, H, A, -, D0
-                if (["O", "H", "A", "-", "D0", ""].includes(c)) {
+                if (["O", "H", "N", "-", "D0", ""].includes(c)) {
                     return "bg-pink-50 text-pink-700 border-pink-200";
                 }
 
@@ -586,3 +586,4 @@ D0,8,08:00~17:00,特殊D0`;
     </script>
 </body>
 </html>
+
