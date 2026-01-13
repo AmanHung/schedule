@@ -3,280 +3,140 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>藥局線上排班系統</title>
+    <title>藥局線上排班系統 (除錯模式)</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        /* CSS 輔助樣式 */
         .loading-spinner { border-top-color: #0D9488; animation: spinner 1s linear infinite; }
         @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         [v-cloak] { display: none; }
-        
-        /* 手機版優化：禁止縮放，避免誤觸 */
-        body { touch-action: manipulation; }
-        
-        /* 自訂細捲軸 */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        /* 除錯視窗樣式 */
+        #debug-console {
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 200px;
+            background: rgba(0,0,0,0.9); color: #00ff00; font-family: monospace;
+            font-size: 12px; padding: 10px; overflow-y: auto; z-index: 9999;
+            border-top: 2px solid #00ff00;
+        }
+        .log-error { color: #ff5555; font-weight: bold; }
+        .log-warn { color: #ffff55; }
+        .log-info { color: #ffffff; }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800 font-sans">
+<body class="bg-gray-100 text-gray-800 font-sans pb-[220px]">
 
 <div id="app" v-cloak class="max-w-md mx-auto min-h-screen bg-white shadow-2xl relative flex flex-col">
     
-    <header class="bg-teal-700 text-white p-4 sticky top-0 z-50 shadow-lg">
-        <div class="flex justify-between items-center">
-            <h1 class="text-lg font-bold flex items-center">
-                <i class="fas fa-prescription-bottle-alt mr-2"></i> 藥局班表
-            </h1>
-            <div class="relative">
-                <select v-model="currentSheet" @change="fetchScheduleData" 
-                        class="appearance-none bg-teal-800 text-white text-sm rounded-lg pl-3 pr-8 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-400 border border-teal-600">
-                    <option v-for="sheet in sheetList" :key="sheet" :value="sheet">{{ sheet }}</option>
-                </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-white">
-                    <i class="fas fa-chevron-down text-xs"></i>
-                </div>
-            </div>
-        </div>
+    <header class="bg-teal-700 text-white p-4 sticky top-0 z-50 shadow-lg flex justify-between items-center">
+        <h1 class="text-lg font-bold"><i class="fas fa-prescription-bottle-alt mr-2"></i> 藥局班表</h1>
+        <select v-model="currentSheet" @change="fetchScheduleData" class="text-black text-sm rounded px-2 py-1">
+            <option v-for="sheet in sheetList" :key="sheet" :value="sheet">{{ sheet }}</option>
+        </select>
     </header>
 
     <div v-if="loading" class="flex-1 flex flex-col items-center justify-center min-h-[50vh]">
-        <div class="loading-spinner ease-linear rounded-full border-4 border-t-4 border-gray-200 h-10 w-10 mb-3"></div>
-        <p class="text-gray-500 text-sm animate-pulse">正在讀取雲端資料庫...</p>
+        <div class="loading-spinner rounded-full border-4 border-t-4 border-gray-200 h-10 w-10 mb-3"></div>
+        <p class="text-gray-500 text-sm">正在連線雲端資料庫...</p>
     </div>
 
-    <div v-else-if="errorMsg" class="flex-1 flex flex-col items-center justify-center p-8 text-center">
-        <div class="bg-red-50 text-red-600 p-4 rounded-full mb-4"><i class="fas fa-wifi text-2xl"></i></div>
-        <h3 class="font-bold text-lg mb-2">讀取失敗</h3>
-        <p class="text-sm text-gray-500 mb-6">{{ errorMsg }}</p>
-        <button @click="init" class="px-6 py-2 bg-teal-600 text-white rounded-lg shadow active:scale-95 transition">重試</button>
+    <div v-else-if="errorMsg" class="p-8 text-center text-red-600 bg-red-50 m-4 rounded-lg">
+        <i class="fas fa-bug text-4xl mb-2"></i>
+        <h3 class="font-bold text-lg">讀取失敗</h3>
+        <p class="text-sm mt-2">{{ errorMsg }}</p>
+        <button @click="init" class="mt-4 px-6 py-2 bg-teal-600 text-white rounded shadow">重試</button>
     </div>
 
-    <main v-else class="flex-1 overflow-y-auto pb-20">
-
-        <div v-if="currentView === 'daily'" class="p-4">
-            <div class="flex items-center justify-between mb-5 bg-white p-1 rounded-xl shadow-sm border border-gray-100">
-                <button @click="changeDay(-1)" class="w-10 h-10 flex items-center justify-center text-teal-600 active:bg-teal-50 rounded-lg transition"><i class="fas fa-chevron-left"></i></button>
-                <div class="flex flex-col items-center cursor-pointer" @click="scrollToToday">
-                    <span class="text-xs text-gray-400 font-medium">{{ currentSheet }}</span>
-                    <span class="text-xl font-bold text-gray-800">
-                        {{ selectedDateIndex }} <span class="text-sm font-normal text-gray-500">({{ getWeekDay(selectedDateIndex) }})</span>
-                    </span>
+    <main v-else class="p-4">
+        <div v-if="currentView === 'daily'">
+            <div class="flex items-center justify-between mb-4 bg-gray-50 p-2 rounded border">
+                <button @click="changeDay(-1)" class="p-2"><i class="fas fa-chevron-left"></i></button>
+                <div class="text-center">
+                    <div class="text-xl font-bold">{{ selectedDateIndex }}日 <span class="text-sm">({{ getWeekDay(selectedDateIndex) }})</span></div>
                 </div>
-                <button @click="changeDay(1)" class="w-10 h-10 flex items-center justify-center text-teal-600 active:bg-teal-50 rounded-lg transition"><i class="fas fa-chevron-right"></i></button>
+                <button @click="changeDay(1)" class="p-2"><i class="fas fa-chevron-right"></i></button>
             </div>
-
-            <div v-for="(group, title) in staffByTitle" :key="title" class="mb-6">
-                <div class="flex items-center mb-2 px-1">
-                    <span class="w-1 h-4 bg-teal-500 rounded mr-2"></span>
-                    <h3 class="text-sm font-bold text-gray-600">{{ title }}</h3>
-                    <span class="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{{ group.length }} 人</span>
-                </div>
-                
-                <div class="grid grid-cols-1 gap-2.5">
-                    <div v-for="person in group" :key="person.id" 
-                         @click="viewPerson(person)"
-                         class="group flex justify-between items-center bg-white p-3 rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-teal-200 transition cursor-pointer">
-                        
-                        <div class="flex items-center">
-                            <div class="w-9 h-9 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center font-bold text-sm mr-3 border border-gray-200 group-hover:bg-teal-50 group-hover:text-teal-700 transition">
-                                {{ person.name.substring(person.name.length-2) }}
-                            </div>
-                            <div>
-                                <div class="font-bold text-gray-800">{{ person.name }}</div>
-                                <div class="text-[10px] text-gray-400">{{ person.id }}</div>
-                            </div>
-                        </div>
-
-                        <div class="relative flex flex-col items-end">
-                            <span :class="['px-3 py-1 rounded-lg text-sm font-bold shadow-sm', getShiftStyle(person.todayShift)]"
-                                  :title="getShiftInfo(person.todayShift)">
-                                {{ person.todayShift || '-' }}
-                            </span>
-                            <span v-if="getShiftTime(person.todayShift)" class="text-[10px] text-gray-400 mt-1">
-                                {{ getShiftTime(person.todayShift).split('~')[0] }}
-                            </span>
-                        </div>
+            
+            <div v-for="(group, title) in staffByTitle" :key="title" class="mb-4">
+                <h3 class="text-sm font-bold text-gray-500 mb-2">{{ title }}</h3>
+                <div class="space-y-2">
+                    <div v-for="person in group" :key="person.id" @click="viewPerson(person)"
+                         class="flex justify-between items-center bg-white p-3 rounded shadow-sm border border-gray-200">
+                        <span class="font-bold">{{ person.name }}</span>
+                        <span :class="['px-3 py-1 rounded text-sm font-bold', getShiftStyle(person.todayShift)]">
+                            {{ person.todayShift || '-' }}
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div v-if="currentView === 'personal'" class="p-4">
-            <button @click="currentView = 'daily'" class="mb-4 text-sm text-gray-500 flex items-center hover:text-teal-600 transition">
-                <i class="fas fa-arrow-left mr-2"></i> 返回總覽
+        <div v-if="currentView === 'personal'">
+            <button @click="currentView = 'daily'" class="mb-4 text-blue-500">
+                <i class="fas fa-arrow-left"></i> 返回
             </button>
-            
-            <div class="bg-gradient-to-br from-teal-50 to-white p-5 rounded-2xl shadow-sm border border-teal-100 mb-6 text-center">
-                <h2 class="text-2xl font-bold text-teal-900">{{ selectedPerson.name }}</h2>
-                <p class="text-teal-600 text-sm mt-1 opacity-80">{{ selectedPerson.title }} ({{ selectedPerson.id }})</p>
-                <div class="mt-4 flex justify-center gap-3">
-                    <div class="text-center px-4 py-2 bg-white rounded-lg shadow-sm border border-gray-100">
-                        <div class="text-xs text-gray-400">總工時</div>
-                        <div class="text-lg font-bold text-gray-700">{{ selectedPerson.totalHours }}</div>
-                    </div>
-                     <div class="text-center px-4 py-2 bg-white rounded-lg shadow-sm border border-gray-100">
-                        <div class="text-xs text-gray-400">休假天數</div>
-                        <div class="text-lg font-bold text-gray-700">{{ selectedPerson.offDays }}</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-7 gap-1 text-center mb-2">
-                <div v-for="d in ['日','一','二','三','四','五','六']" class="text-xs text-gray-400 font-bold py-1">{{ d }}</div>
-            </div>
-            
-            <div class="grid grid-cols-7 gap-1.5">
-                <div v-for="(shift, dateIdx) in selectedPerson.schedule" :key="dateIdx" 
-                     @click="showShiftDetail(dateIdx, shift)"
-                     :title="getShiftInfo(shift)"
-                     :class="['relative flex flex-col items-center justify-between py-2 rounded-lg aspect-[3/4] border transition cursor-pointer', 
-                              dateIdx == selectedDateIndex ? 'ring-2 ring-teal-500 border-transparent z-10' : 'border-gray-50 bg-white hover:border-gray-300']">
-                    
-                    <span class="text-[10px] text-gray-400 font-medium">{{ dateIdx }}</span>
-                    
-                    <span :class="['text-sm font-bold mb-1', getShiftTextStyle(shift)]">
-                        {{ shift }}
-                    </span>
-
-                    <div v-if="isSpecialShift(shift)" class="w-1 h-1 rounded-full bg-red-400"></div>
-                </div>
-            </div>
-
-            <div class="mt-6">
-                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">本月班別統計</h4>
-                <div class="flex flex-wrap gap-2">
-                    <span v-for="(count, code) in selectedPerson.stats" :key="code" 
-                          :class="['text-xs px-2 py-1 rounded border', getShiftStyle(code)]">
-                        {{ code }} <span class="opacity-60 border-l border-current ml-1 pl-1">{{ count }}</span>
-                    </span>
+            <h2 class="text-2xl font-bold mb-4 text-center">{{ selectedPerson.name }}</h2>
+            <div class="grid grid-cols-7 gap-1">
+                <div v-for="d in ['日','一','二','三','四','五','六']" class="text-center text-xs text-gray-400">{{ d }}</div>
+                <div v-for="(shift, dateIdx) in selectedPerson.schedule" :key="dateIdx"
+                     class="border p-1 rounded min-h-[50px] flex flex-col items-center justify-center"
+                     :class="dateIdx == selectedDateIndex ? 'border-teal-500 ring-2' : ''">
+                    <span class="text-xs text-gray-400">{{ dateIdx }}</span>
+                    <span :class="['text-sm font-bold', getShiftTextStyle(shift)]">{{ shift }}</span>
                 </div>
             </div>
         </div>
-
-        <div v-if="currentView === 'master'" class="h-full flex flex-col bg-white">
-            <div class="flex-1 overflow-auto">
-                <table class="w-full text-sm text-center border-collapse">
-                    <thead class="text-xs text-gray-500 bg-gray-50 sticky top-0 z-20 shadow-sm">
-                        <tr>
-                            <th class="px-2 py-3 border-b border-r bg-gray-50 sticky left-0 z-30 w-20 min-w-[5rem]">姓名</th>
-                            <th v-for="d in daysInSheet" :key="d" class="px-1 py-2 border-b min-w-[2.5rem]">
-                                <div class="font-bold">{{ d }}</div>
-                                <div class="text-[10px] font-normal scale-90">{{ getWeekDay(d) }}</div>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100">
-                        <tr v-for="person in allStaff" :key="person.id" class="hover:bg-gray-50 transition-colors">
-                            <td class="p-2 font-bold text-gray-700 text-xs border-r bg-white sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                                {{ person.name }}
-                            </td>
-                            <td v-for="d in daysInSheet" :key="d" 
-                                :title="getShiftInfo(person.schedule[d])"
-                                :class="['p-1 border-r border-gray-50 text-xs font-bold cursor-default', getShiftTextStyle(person.schedule[d])]">
-                                {{ person.schedule[d] }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
     </main>
+</div>
 
-    <nav class="fixed bottom-0 w-full max-w-md bg-white border-t border-gray-200 flex justify-around py-2 text-[10px] text-gray-400 z-50 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
-        <button @click="currentView = 'daily'" :class="{'text-teal-600': currentView === 'daily'}" class="flex flex-col items-center w-full py-1 active:scale-95 transition">
-            <div :class="['w-10 h-6 rounded-full flex items-center justify-center mb-1', currentView === 'daily' ? 'bg-teal-100' : '']">
-                <i class="fas fa-calendar-day text-lg"></i>
-            </div>
-            <span>今日班表</span>
-        </button>
-        <button @click="currentView = 'master'" :class="{'text-teal-600': currentView === 'master'}" class="flex flex-col items-center w-full py-1 active:scale-95 transition">
-             <div :class="['w-10 h-6 rounded-full flex items-center justify-center mb-1', currentView === 'master' ? 'bg-teal-100' : '']">
-                <i class="fas fa-th text-lg"></i>
-            </div>
-            <span>全院總表</span>
-        </button>
-    </nav>
+<div id="debug-console">
+    <div><strong>--- 系統除錯紀錄 (請截圖此處) ---</strong></div>
 </div>
 
 <script>
+    // ----------------------------------------
+    // 1. 強制覆寫 Console，讓錯誤顯示在螢幕上
+    // ----------------------------------------
+    (function(){
+        const oldLog = console.log;
+        const oldError = console.error;
+        const oldWarn = console.warn;
+        const debugDiv = document.getElementById('debug-console');
+
+        function printToScreen(msg, type) {
+            const div = document.createElement('div');
+            div.className = type === 'error' ? 'log-error' : (type === 'warn' ? 'log-warn' : 'log-info');
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            debugDiv.appendChild(div);
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+
+        console.log = function(...args) {
+            oldLog.apply(console, args);
+            printToScreen(args.join(' '), 'info');
+        };
+        console.error = function(...args) {
+            oldError.apply(console, args);
+            printToScreen(args.join(' '), 'error');
+        };
+        console.warn = function(...args) {
+            // 忽略 Tailwind 警告
+            if(args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) return;
+            oldWarn.apply(console, args);
+            printToScreen(args.join(' '), 'warn');
+        };
+    })();
+
     const { createApp } = Vue;
 
-    // ==========================================
-    // 設定區
-    // ==========================================
-    
-    // 你的 API 網址 (語法正確)
+    // ----------------------------------------
+    // 2. 你的 API 網址 (我已經修復了換行問題)
+    // ----------------------------------------
     const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbw1yyWwV2yGjBR3ZSd62W1KyQCt5ER9MM5QXcNmTQ8io0JWHOGX66FMN4r5ocw7BQ/exec';
 
-    // 班別資料庫
     const SHIFT_DATA = {
-        'D':   { style: 'bg-blue-100 text-blue-800', hours: 8, time: '08:00~17:30', desc: '正常班' },
-        'D-':  { style: 'bg-blue-100 text-blue-800', hours: 8, time: '08:30~17:00', desc: '正常班變形' },
-        'D1':  { style: 'bg-blue-50 text-blue-700', hours: 8, time: '08:00~17:30', desc: '彈性班' },
-        'D2':  { style: 'bg-blue-50 text-blue-700', hours: 8, time: '07:40~16:10', desc: '彈性班(早)' },
-        'D3':  { style: 'bg-blue-50 text-blue-700', hours: 8, time: '08:00~16:30', desc: '彈性班' },
-        'D4':  { style: 'bg-blue-50 text-blue-700', hours: 8, time: '09:00~18:00', desc: '彈性班(晚)' },
-        'D5':  { style: 'bg-blue-50 text-blue-700', hours: 8, time: '08:00~16:30', desc: '彈性班' },
-        'D5-': { style: 'bg-blue-50 text-blue-700', hours: 8, time: '08:00~17:30', desc: '彈性班' },
-        'D6':  { style: 'bg-blue-50 text-blue-700', hours: 8, time: '08:30~17:30', desc: '彈性班' },
-        'D6-': { style: 'bg-blue-50 text-blue-700', hours: 8, time: '08:00~17:00', desc: '彈性班' },
-        'D7':  { style: 'bg-blue-50 text-blue-700', hours: 8, time: '08:00~17:30', desc: '彈性班' },
-        'D7-': { style: 'bg-blue-50 text-blue-700', hours: 8, time: '08:00~17:00', desc: '彈性班' },
-        'D8':  { style: 'bg-blue-50 text-blue-700', hours: 8, time: '08:00~16:30', desc: '彈性班' },
-        'D9':  { style: 'bg-blue-50 text-blue-700', hours: 8, time: '08:00~16:30', desc: '彈性班' },
-        'TT':  { style: 'bg-blue-100 text-blue-800', hours: 8, time: '08:00~16:00', desc: '正常班' },
-        'U':   { style: 'bg-blue-100 text-blue-800', hours: 8, time: '08:00~16:30', desc: '週六全日' },
-        'U1':  { style: 'bg-blue-100 text-blue-800', hours: 8, time: '07:50~16:20', desc: '週六彈性' },
-        'C':   { style: 'bg-blue-200 text-blue-900', hours: 4, time: '09:00~13:00', desc: '週六化療調配' },
-        'TD':  { style: 'bg-teal-100 text-teal-800', hours: 8, time: '08:30~17:30', desc: '中藥班' },
-        'D過': { style: 'bg-blue-100 text-blue-600', hours: 8, time: '08:00~16:30', desc: '中午過帳班' },
-        'D4P': { style: 'bg-indigo-100 text-indigo-900 ring-1 ring-indigo-200', hours: 10, time: '09:00~20:30', desc: '夜診長班' },
-        'D6P': { style: 'bg-indigo-100 text-indigo-900 ring-1 ring-indigo-200', hours: 8,  time: '08:30~20:30', desc: '夜診變形' },
-        'D7P': { style: 'bg-indigo-100 text-indigo-900 ring-1 ring-indigo-200', hours: 10, time: '08:00~20:30', desc: '夜診長班' },
-        'D-P': { style: 'bg-indigo-100 text-indigo-900 ring-1 ring-indigo-200', hours: 8,  time: '08:30~21:30', desc: '夜診變形' },
-        'DP1': { style: 'bg-indigo-100 text-indigo-900 ring-1 ring-indigo-200', hours: 10, time: '08:00~20:30', desc: '夜診長班' },
-        'DP2': { style: 'bg-indigo-100 text-indigo-900 ring-1 ring-indigo-200', hours: 10, time: '08:00~20:00', desc: '夜診長班' },
-        'TP1': { style: 'bg-teal-100 text-teal-900 ring-1 ring-teal-300',       hours: 10, time: '08:00~20:30', desc: '中藥夜診' },
-        'RP1': { style: 'bg-indigo-100 text-indigo-900 ring-1 ring-indigo-200', hours: 10, time: '08:00~21:30', desc: '夜診長班' },
-        'RP2': { style: 'bg-indigo-100 text-indigo-900 ring-1 ring-indigo-200', hours: 10, time: '08:00~20:30', desc: '夜診長班' },
-        'EP1': { style: 'bg-pink-100 text-pink-900 ring-1 ring-pink-300',       hours: 10, time: '08:00~21:30', desc: '夜診長班' },
-        'A':   { style: 'bg-orange-100 text-orange-800', hours: 8,   time: '15:45~00:15', desc: '小夜班ER' },
-        'A-':  { style: 'bg-orange-100 text-orange-800', hours: 7.5, time: '16:00~00:00', desc: '小夜變形' },
-        'A1':  { style: 'bg-amber-100 text-amber-800',   hours: 6,   time: '08:00~14:00', desc: 'A1' },
-        'A2':  { style: 'bg-amber-100 text-amber-800',   hours: 6,   time: '11:00~17:00', desc: 'A2' },
-        'A3':  { style: 'bg-amber-100 text-amber-800',   hours: 6,   time: '08:30~14:30', desc: 'A3' },
-        'SP':  { style: 'bg-orange-100 text-orange-900', hours: 8,   time: '14:00~22:30', desc: '特別班' },
-        'SP2': { style: 'bg-orange-50 text-orange-800',  hours: 6,   time: '13:30~20:30', desc: '特別班短' },
-        'NP2': { style: 'bg-orange-50 text-orange-800',  hours: 3,   time: '17:30~20:30', desc: '夜診短班' },
-        'NN':  { style: 'bg-purple-100 text-purple-800', hours: 8,   time: '23:45~08:15', desc: '大夜班' },
-        'NN-': { style: 'bg-purple-100 text-purple-800', hours: 7.5, time: '00:00~08:00', desc: '大夜變形' },
-        'S':   { style: 'bg-green-100 text-green-800', hours: 4, time: '08:00~12:00', desc: '上午班' },
-        'S-':  { style: 'bg-green-100 text-green-800', hours: 4, time: '08:30~12:30', desc: '上午班' },
-        'S1':  { style: 'bg-green-100 text-green-800', hours: 4, time: '08:30~12:30', desc: '上午班' },
-        'S2':  { style: 'bg-green-100 text-green-800', hours: 4, time: '13:30~17:30', desc: '下午班' },
-        'S3':  { style: 'bg-green-50 text-green-700',  hours: 3, time: '09:00~12:00', desc: '部分工時' },
-        'S4':  { style: 'bg-green-50 text-green-700',  hours: 3, time: '14:00~17:00', desc: '部分工時' },
-        'S下': { style: 'bg-green-100 text-green-800', hours: 4, time: '13:30~17:30', desc: '下午班' },
-        'SD':  { style: 'bg-green-100 text-green-800', hours: 6, time: '08:30~15:30', desc: 'SD班' },
-        'TS1': { style: 'bg-teal-50 text-teal-700',    hours: 4, time: '08:30~12:30', desc: '中藥半天' },
-        'TS2': { style: 'bg-teal-50 text-teal-700',    hours: 5, time: '08:30~14:30', desc: '中藥特別' },
-        'ED':  { style: 'bg-pink-100 text-pink-800 font-bold', hours: 8, time: '08:00~16:30', desc: '急診日班' },
-        'HA':  { style: 'bg-red-100 text-red-800',     hours: 8, time: '15:45~00:15', desc: '假日小夜' },
-        'HA2': { style: 'bg-red-100 text-red-800',     hours: 8, time: '15:00~23:00', desc: '週日小夜' },
-        'HD':  { style: 'bg-pink-50 text-pink-800',    hours: 8, time: '07:45~16:15', desc: '假日日班' },
-        'RD':  { style: 'bg-pink-50 text-pink-800',    hours: 8, time: '08:30~17:30', desc: '急診彈性' },
-        'PSY': { style: 'bg-indigo-50 text-indigo-700',hours: 8, time: '08:00~16:30', desc: '身心科' },
-        'O':   { style: 'bg-gray-100 text-gray-400', hours: 0, time: '', desc: '休息日' },
-        'H':   { style: 'bg-white text-red-500 border border-red-100', hours: 0, time: '', desc: '例假日' },
-        'N':   { style: 'bg-white text-red-600 font-bold', hours: 0, time: '', desc: '國定假日' },
-        '-':   { style: 'bg-gray-50 text-gray-300', hours: 0, time: '', desc: '未排班' },
-        'D0':  { style: 'bg-gray-100 text-gray-400', hours: 0, time: '', desc: '請休班' },
-        'S0':  { style: 'bg-gray-100 text-gray-400', hours: 0, time: '', desc: '請休班' },
-        'DEFAULT': { style: 'bg-gray-50 text-gray-600 border border-gray-200', hours: 0, time: '', desc: '' }
+        'D': { style: 'bg-blue-100 text-blue-800' }, 'E': { style: 'bg-orange-100 text-orange-800' },
+        'N': { style: 'bg-purple-100 text-purple-800' }, 'O': { style: 'bg-gray-100 text-gray-400' },
+        'H': { style: 'bg-red-50 text-red-600' }, 'DEFAULT': { style: 'bg-white text-gray-700 border' }
     };
 
     createApp({
@@ -284,236 +144,160 @@
             return {
                 loading: true,
                 errorMsg: '',
-                sheetList: [], 
-                currentSheet: '', 
+                sheetList: [],
+                currentSheet: '',
                 currentView: 'daily',
                 allStaff: [],
                 daysInSheet: [],
                 headerWeekDays: {},
                 selectedDateIndex: new Date().getDate(),
-                selectedPerson: null,
+                selectedPerson: null
             }
         },
         computed: {
             staffByTitle() {
                 const grouped = {};
-                const order = ['排班負責人', '一般同仁'];
-                
-                this.allStaff.forEach(person => {
-                    const shift = person.schedule[this.selectedDateIndex];
-                    person.todayShift = shift;
-                    const groupTitle = person.title || '其他人員';
-                    if (!grouped[groupTitle]) grouped[groupTitle] = [];
-                    grouped[groupTitle].push(person);
+                this.allStaff.forEach(p => {
+                    p.todayShift = p.schedule[this.selectedDateIndex];
+                    if (!grouped[p.title]) grouped[p.title] = [];
+                    grouped[p.title].push(p);
                 });
-                
-                const sortedGrouped = {};
-                order.forEach(key => {
-                    if (grouped[key]) sortedGrouped[key] = grouped[key];
-                });
-                Object.keys(grouped).forEach(key => {
-                    if (!order.includes(key)) sortedGrouped[key] = grouped[key];
-                });
-                return sortedGrouped;
+                return grouped;
             }
         },
         mounted() {
+            console.log("Vue App 已啟動，準備連線...");
+            console.log("API URL: " + GAS_API_URL);
             this.init();
         },
         methods: {
-            // 使用更穩定的文字串接方式，避免 URL Object 的相容性問題
             async init() {
                 this.loading = true;
                 this.errorMsg = '';
                 try {
-                    // 直接串接字串，最簡單暴力
-                    const fetchUrl = GAS_API_URL + '?op=get_months';
-                    
-                    console.log("正在連線到:", fetchUrl);
-                    
-                    // redirect: 'follow' 是關鍵，因為 GAS 會轉址
-                    const res = await fetch(fetchUrl, { redirect: 'follow' });
-                    
-                    if (!res.ok) throw new Error(`HTTP 錯誤! 狀態碼: ${res.status}`);
-                    
-                    // 先讀成文字，避免直接轉 JSON 失敗看不到內容
+                    // 加入時間戳記避免快取
+                    const targetUrl = `${GAS_API_URL}?op=get_months&t=${Date.now()}`;
+                    console.log("正在發送請求到: " + targetUrl);
+
+                    const res = await fetch(targetUrl, { redirect: 'follow' });
+                    console.log("伺服器回應狀態: " + res.status);
+
+                    if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+
                     const textData = await res.text();
-                    
-                    try {
-                        const json = JSON.parse(textData);
-                        if (json.status === 'success') {
-                            this.sheetList = json.data;
-                            if (this.sheetList.length > 0) {
-                                this.currentSheet = this.sheetList[this.sheetList.length - 1];
-                                await this.fetchScheduleData();
-                            } else {
-                                this.errorMsg = "讀取成功，但找不到任何月份資料";
-                                this.loading = false;
-                            }
-                        } else {
-                            throw new Error(json.message || "API 回傳錯誤");
-                        }
-                    } catch (parseError) {
-                        console.error("解析 JSON 失敗，原始內容:", textData);
-                        throw new Error("資料格式錯誤 (非 JSON)，請看 Console");
+                    console.log("收到原始資料(前50字): " + textData.substring(0, 50));
+
+                    // 檢查是否是 Google 登入頁面 (常見錯誤)
+                    if (textData.includes("<!DOCTYPE html>") || textData.includes("Google Accounts")) {
+                        throw new Error("權限錯誤：讀取到的是 Google 登入頁面，請檢查 GAS 部署權限是否為 'Anyone'。");
                     }
 
+                    const json = JSON.parse(textData);
+                    if (json.status === 'success') {
+                        console.log("月份列表讀取成功: " + json.data);
+                        this.sheetList = json.data;
+                        if (this.sheetList.length > 0) {
+                            this.currentSheet = this.sheetList[this.sheetList.length - 1];
+                            this.fetchScheduleData();
+                        }
+                    } else {
+                        throw new Error(json.message);
+                    }
                 } catch (e) {
-                    console.error("Init Error:", e);
-                    this.errorMsg = "連線失敗：" + e.message;
+                    console.error("初始化失敗: " + e.message);
+                    this.errorMsg = e.message;
                     this.loading = false;
                 }
             },
 
             async fetchScheduleData() {
                 this.loading = true;
-                this.allStaff = [];
                 try {
-                    const fetchUrl = GAS_API_URL + '?op=get_data&sheet=' + encodeURIComponent(this.currentSheet);
-                    const res = await fetch(fetchUrl, { redirect: 'follow' });
+                    const targetUrl = `${GAS_API_URL}?op=get_data&sheet=${this.currentSheet}&t=${Date.now()}`;
+                    console.log("正在讀取班表資料: " + this.currentSheet);
+                    
+                    const res = await fetch(targetUrl, { redirect: 'follow' });
                     const textData = await res.text();
                     const json = JSON.parse(textData);
 
                     if (json.status === 'success') {
+                        console.log("班表資料讀取成功，開始解析...");
                         this.parseData(json.data);
                     } else {
                         throw new Error(json.message);
                     }
                 } catch (e) {
-                    console.error("Fetch Data Error:", e);
-                    this.errorMsg = "讀取班表失敗：" + e.message;
+                    console.error("讀取班表失敗: " + e.message);
+                    this.errorMsg = e.message;
                 }
                 this.loading = false;
             },
 
             parseData(data) {
                 if (!data || data.length < 2) return;
-                
                 const headers = data[0];
                 this.daysInSheet = [];
                 this.headerWeekDays = {};
-                const dateStartIndex = 3;
                 
+                // 自動偵測日期開始的欄位 (找第一個是數字的欄位)
+                let dateStartIndex = 3; 
+                for(let i=0; i<headers.length; i++) {
+                     if(!isNaN(parseInt(headers[i]))) {
+                         dateStartIndex = i;
+                         break;
+                     }
+                }
+                console.log("日期欄位偵測從 Index " + dateStartIndex + " 開始");
+
                 for (let i = dateStartIndex; i < headers.length; i++) {
-                    const rawStr = headers[i].toString(); 
-                    const dateNum = parseInt(rawStr); 
-                    if (!isNaN(dateNum)) {
-                        this.daysInSheet.push(dateNum);
-                        const match = rawStr.match(/\((.*?)\)/);
-                        if (match) this.headerWeekDays[dateNum] = match[1];
+                    const d = parseInt(headers[i]);
+                    if (!isNaN(d)) {
+                        this.daysInSheet.push(d);
+                        const match = headers[i].toString().match(/\((.*?)\)/);
+                        if (match) this.headerWeekDays[d] = match[1];
                     }
                 }
 
-                const staffRows = data.slice(1);
-                this.allStaff = staffRows.map(row => {
+                this.allStaff = data.slice(1).map(row => {
                     const schedule = {};
-                    const stats = {};
-                    let totalHours = 0;
-                    let offDays = 0;
-
-                    this.daysInSheet.forEach((d, index) => {
-                        const cellVal = row[index + dateStartIndex] ? row[index + dateStartIndex].toString().trim() : '';
-                        schedule[d] = cellVal;
-
-                        if (cellVal && cellVal !== '-') {
-                            stats[cellVal] = (stats[cellVal] || 0) + 1;
-                            
-                            const shiftDef = SHIFT_DATA[cellVal] || SHIFT_DATA[cellVal.charAt(0)];
-                            if (shiftDef && shiftDef.hours) {
-                                totalHours += shiftDef.hours;
-                            }
-                            if (['O', 'H', 'N'].includes(cellVal)) {
-                                offDays++;
-                            }
-                        }
+                    this.daysInSheet.forEach((d, idx) => {
+                        schedule[d] = row[idx + dateStartIndex] ? row[idx + dateStartIndex].toString().trim() : '';
                     });
-
-                    return {
-                        title: row[0], 
-                        id: row[1],
-                        name: row[2],
-                        schedule: schedule,
-                        stats: stats,
-                        totalHours: totalHours,
-                        offDays: offDays,
-                        todayShift: '' 
-                    };
+                    return { title: row[0], id: row[1], name: row[2], schedule: schedule, todayShift: '' };
                 });
-                
-                const maxDate = Math.max(...this.daysInSheet);
-                if (this.selectedDateIndex > maxDate) {
-                    this.selectedDateIndex = 1;
-                }
+                console.log("人員解析完成，共 " + this.allStaff.length + " 人");
             },
 
             getShiftStyle(code) {
                 if (!code) return 'bg-white';
-                code = code.trim();
+                const char = code.charAt(0);
                 if (SHIFT_DATA[code]) return SHIFT_DATA[code].style;
-                const firstChar = code.charAt(0);
-                if (firstChar === 'D') return SHIFT_DATA['D'].style;
-                if (firstChar === 'A' || firstChar === 'E') return SHIFT_DATA['A'].style;
-                if (firstChar === 'N') return SHIFT_DATA['NN'].style;
-                if (firstChar === 'S') return SHIFT_DATA['S'].style;
+                if (SHIFT_DATA[char]) return SHIFT_DATA[char].style;
+                if (char === 'A' || char === 'E') return SHIFT_DATA['E'].style; // 小夜
+                if (char === 'S') return 'bg-green-100 text-green-800'; // 半天
                 return SHIFT_DATA['DEFAULT'].style;
             },
-
+            
             getShiftTextStyle(code) {
-                const fullClass = this.getShiftStyle(code);
-                const match = fullClass.match(/text-[\w-]+/);
-                return match ? match[0] : 'text-gray-600';
+                 const style = this.getShiftStyle(code);
+                 if(style.includes('text-red')) return 'text-red-600';
+                 if(style.includes('text-blue')) return 'text-blue-600';
+                 if(style.includes('text-purple')) return 'text-purple-600';
+                 if(style.includes('text-orange')) return 'text-orange-600';
+                 return 'text-gray-600';
             },
 
-            getShiftInfo(code) {
-                if (!code) return '';
-                let data = SHIFT_DATA[code];
-                if (!data) data = SHIFT_DATA[code.charAt(0)];
-                if (data) return `${data.time} (${data.desc})`;
-                return code;
-            },
+            getWeekDay(d) { return this.headerWeekDays[d] || ''; },
             
-            getShiftTime(code) {
-                 if (!code) return '';
-                 let data = SHIFT_DATA[code];
-                 if (!data) data = SHIFT_DATA[code.charAt(0)];
-                 return data ? data.time : '';
-            },
-
-            isSpecialShift(code) {
-                if(!code) return false;
-                return code.length > 2 || code.includes('P') || code === 'ED';
-            },
-
-            getWeekDay(dateNum) {
-                return this.headerWeekDays[dateNum] || '';
-            },
-
             changeDay(delta) {
-                const currentIndex = this.daysInSheet.indexOf(this.selectedDateIndex);
-                let nextIndex = currentIndex + delta;
-                if (nextIndex < 0) nextIndex = 0;
-                if (nextIndex >= this.daysInSheet.length) nextIndex = this.daysInSheet.length - 1;
-                this.selectedDateIndex = this.daysInSheet[nextIndex];
-            },
-
-            scrollToToday() {
-                 const today = new Date().getDate();
-                 if(this.daysInSheet.includes(today)) {
-                     this.selectedDateIndex = today;
-                 }
-            },
-
-            viewPerson(person) {
-                this.selectedPerson = person;
-                this.currentView = 'personal';
+                const idx = this.daysInSheet.indexOf(this.selectedDateIndex);
+                let next = idx + delta;
+                if(next >= 0 && next < this.daysInSheet.length) this.selectedDateIndex = this.daysInSheet[next];
             },
             
-            showShiftDetail(date, shift) {
-                // Future feature: detailed alert or modal
-            }
+            viewPerson(p) { this.selectedPerson = p; this.currentView = 'personal'; }
         }
     });
 </script>
 </body>
-
 </html>
