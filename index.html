@@ -272,8 +272,8 @@
             // Touch Swipe State
             const touchStartRef = useRef(null);
             const touchEndRef = useRef(null);
-            const minSwipeDistance = 60; // 靈敏度調整: 30 -> 60 (數值越大越不靈敏)
-            const scrollRef = useRef(null); 
+            const minSwipeDistance = 80; 
+            const scrollRef = useRef(null); // For daily slider
 
             // Helper: Date Style
             const getDateStyleInfo = (headerStr, currentMonth) => {
@@ -319,7 +319,6 @@
                             fetch(`${baseUrl}&sheet=${encodeURIComponent(SHIFT_DEF_SHEET_NAME)}`), 
                             fetch(`${baseUrl}&sheet=${encodeURIComponent(currentMonth)}`) 
                         ]);
-                        if (!resDefs.ok || !resSched.ok) throw new Error("Network response was not ok");
                         const defsText = await resDefs.text();
                         const scheduleText = await resSched.text();
                         if (scheduleText.includes("<!DOCTYPE html")) throw new Error("Permission Denied");
@@ -337,9 +336,9 @@
             // Handlers
             const handleMonthChange = (offset) => {
                 setCurrentMonth(prev => {
-                    const [year, month] = prev.split('-').map(Number);
-                    const date = new Date(year, month - 1 + offset, 1);
-                    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    const [y, m] = prev.split('-').map(Number);
+                    const d = new Date(y, m - 1 + offset, 1);
+                    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                 });
             };
 
@@ -430,6 +429,7 @@
                 setActiveTab('daily');
             };
 
+            // Check Status Logic
             const getRequestStatus = (req) => {
                 const person = scheduleData.data.find(p => p[1] === req.applicantId);
                 const target = scheduleData.data.find(p => p[1] === req.targetId);
@@ -448,34 +448,18 @@
                 return "pending";
             };
 
-            useEffect(() => {
-                if (scheduleData.headers.length === 0) return;
-                const today = new Date();
-                const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-                if (currentMonth === currentYearMonth) {
-                    const todayDate = today.getDate();
-                    const foundIndex = scheduleData.headers.findIndex(h => parseInt(h.replace(/[^0-9]/g, '')) === todayDate);
-                    if (foundIndex !== -1) {
-                        if (activeTab !== 'daily' && activeTab !== 'matrix') {
-                            setSelectedDayIndex(foundIndex);
-                            setMatrixStartIndex(Math.min(foundIndex, Math.max(0, scheduleData.headers.length - 5)));
-                        }
-                    }
-                } else {
-                    setSelectedDayIndex(0);
-                    setMatrixStartIndex(0);
-                }
-            }, [scheduleData, currentMonth]);
-
+            // Touch Handlers
             const onTouchStart = (e) => { touchEndRef.current = null; touchStartRef.current = e.targetTouches[0].clientX; };
             const onTouchMove = (e) => { touchEndRef.current = e.targetTouches[0].clientX; };
             const onTouchEnd = () => {
                 if (touchStartRef.current === null || touchEndRef.current === null) return;
                 const distance = touchStartRef.current - touchEndRef.current;
                 const step = Math.floor(Math.abs(distance) / minSwipeDistance);
+
                 if (step > 0) {
                     const direction = distance > 0 ? 1 : -1;
                     const shiftAmount = step * direction;
+
                     if (activeTab === 'daily') {
                         setSelectedDayIndex(prev => Math.max(0, Math.min(prev + shiftAmount, scheduleData.headers.length - 1)));
                     } else if (activeTab === 'matrix') {
@@ -485,6 +469,7 @@
                 touchStartRef.current = null; touchEndRef.current = null;
             };
 
+            // Scroll to day in Daily view
             const scrollToDay = (index) => {
                 setTimeout(() => {
                     const container = scrollRef.current;
@@ -499,6 +484,26 @@
             useEffect(() => {
                 if (activeTab === 'daily') scrollToDay(selectedDayIndex);
             }, [activeTab]);
+
+            // Auto select current day
+            useEffect(() => {
+                if (scheduleData.headers.length === 0) return;
+                const today = new Date();
+                const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                if (currentMonth === currentYearMonth) {
+                    const todayDate = today.getDate(); 
+                    const foundIndex = scheduleData.headers.findIndex(h => parseInt(h.replace(/[^0-9]/g, '')) === todayDate);
+                    if (foundIndex !== -1) {
+                        if (activeTab !== 'daily' && activeTab !== 'matrix') {
+                            setSelectedDayIndex(foundIndex);
+                            setMatrixStartIndex(Math.min(foundIndex, Math.max(0, scheduleData.headers.length - 5)));
+                        }
+                    }
+                } else {
+                    setSelectedDayIndex(0);
+                    setMatrixStartIndex(0);
+                }
+            }, [scheduleData, currentMonth]);
 
             const getTodayInfo = (personRow) => {
                 if (!personRow || !scheduleData.headers) return null;
@@ -515,6 +520,7 @@
 
             return (
                 <div className="min-h-screen pb-20 max-w-4xl mx-auto bg-white shadow-lg min-h-screen flex flex-col">
+                    {/* Header */}
                     <header className="bg-blue-600 text-white p-4 sticky top-0 z-40 shadow-md">
                         <div className="flex justify-between items-center mb-4">
                             <h1 className="text-xl font-bold flex items-center gap-2"><i data-lucide="calendar"></i>線上排班系統</h1>
@@ -537,13 +543,14 @@
                         {/* VIEW: PERSONAL */}
                         {!loading && activeTab === 'personal' && (
                             <div className="animate-fade-in space-y-4">
+                                {/* Person Select */}
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex justify-between items-center relative">
                                     <div className="relative group">
                                         <div className="flex items-center gap-2 cursor-pointer">
                                             <h2 className="text-2xl font-black text-gray-800 border-b-2 border-dashed border-gray-300">{scheduleData.data.find(p => p[1] === selectedPersonId)?.[2] || "選擇人員"}</h2>
                                             <i data-lucide="chevron-down" className="w-4 h-4 text-gray-400"></i>
                                         </div>
-                                        <select value={selectedPersonId} onChange={handlePersonChange} className="absolute inset-0 opacity-0 cursor-pointer">
+                                        <select value={selectedPersonId} onChange={e => {setSelectedPersonId(e.target.value); localStorage.setItem('lastSelectedPersonId', e.target.value);}} className="absolute inset-0 opacity-0 cursor-pointer">
                                             <option value="" disabled>選擇人員...</option>
                                             {scheduleData.data.map(p => <option key={p[1]} value={p[1]}>{p[2]}</option>)}
                                         </select>
@@ -561,6 +568,7 @@
                                     })()}
                                 </div>
 
+                                {/* Compare & Swap Controls */}
                                 {selectedPersonId && (
                                     <div className={`rounded-xl p-4 border transition-all ${isSwapMode ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200' : 'bg-gray-50 border-gray-200'}`}>
                                         <div className="flex items-center justify-between mb-2">
@@ -570,6 +578,7 @@
                                                     {isSwapMode ? "換班模式進行中" : "對照與換班"}
                                                 </span>
                                             </div>
+                                            
                                             {!isSwapMode && comparePersonId && (
                                                 <button onClick={() => setIsSwapMode(true)} className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow hover:bg-blue-700 transition flex items-center gap-1">
                                                     <i data-lucide="arrow-left-right" className="w-3 h-3"></i> 申請換班
@@ -579,6 +588,7 @@
                                                 <button onClick={cancelSwapMode} className="bg-gray-200 text-gray-600 text-xs px-3 py-1.5 rounded-full font-bold hover:bg-gray-300 transition">取消</button>
                                             )}
                                         </div>
+
                                         <div className="relative flex items-center gap-2">
                                             <select 
                                                 value={comparePersonId} 
@@ -602,6 +612,7 @@
                                     </div>
                                 )}
 
+                                {/* Calendar */}
                                 {selectedPersonId && (
                                     <CalendarGrid 
                                         headers={scheduleData.headers}
@@ -618,17 +629,28 @@
                                     />
                                 )}
 
+                                {/* Local Requests Display */}
                                 {swapRequests.length > 0 && (
                                     <div className="mt-6">
-                                        <h3 className="text-sm font-bold text-gray-500 mb-2 px-1 flex items-center gap-2"><i data-lucide="history" className="w-4 h-4"></i> 換班申請紀錄</h3>
+                                        <h3 className="text-sm font-bold text-gray-500 mb-2 px-1 flex items-center gap-2">
+                                            <i data-lucide="history" className="w-4 h-4"></i> 換班申請紀錄
+                                        </h3>
                                         <div className="space-y-2">
                                             {swapRequests.map(req => {
                                                 const currentStatus = getRequestStatus(req);
                                                 return (
                                                     <div key={req.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm text-sm relative group">
-                                                        <button onClick={() => handleDeleteRequest(req.id)} className="absolute top-2 right-2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition" title="刪除紀錄"><i data-lucide="trash-2" className="w-4 h-4"></i></button>
-                                                        <div className="flex justify-between items-center mb-2 pr-8">
-                                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${currentStatus === 'processed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{currentStatus === 'processed' ? '已處理' : '申請中'}</span>
+                                                        <button 
+                                                            onClick={() => handleDeleteRequest(req.id)}
+                                                            className="absolute top-2 right-2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition"
+                                                            title="刪除紀錄"
+                                                        >
+                                                            <i data-lucide="trash-2" className="w-4 h-4"></i>
+                                                        </button>
+                                                        <div className="flex justify-between items-center mb-1 pr-8">
+                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${currentStatus === 'processed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                                {currentStatus === 'processed' ? '已處理' : '申請中'}
+                                                            </span>
                                                             <span className="text-xs text-gray-400">{req.timestamp.split('T')[0]}</span>
                                                         </div>
                                                         <div className="flex items-center gap-2 text-gray-700 font-medium">
@@ -758,7 +780,7 @@
                             </div>
                         )}
 
-                        {/* VIEW: MATRIX (Click Disabled) */}
+                        {/* VIEW: MATRIX */}
                         {activeTab === 'matrix' && scheduleData.headers.length > 0 && (
                             <div className="animate-fade-in flex flex-col h-full">
                                 <div className="flex justify-between items-center mb-2 bg-gray-100 p-2 rounded-lg">
@@ -791,7 +813,7 @@
                                                         const code = person[3 + realIdx];
                                                         const style = getShiftStyle(code);
                                                         return (
-                                                            <div key={dIdx} className="border-r border-gray-100 last:border-r-0 p-1 flex items-center justify-center">
+                                                            <div key={dIdx} onClick={() => handleShiftClick(code)} className="border-r border-gray-100 last:border-r-0 p-1 flex items-center justify-center cursor-pointer">
                                                                 {code && code !== '-' && ( <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${style.replace('border-l-4', '').replace('border', '')}`}>{code}</span> )}
                                                             </div>
                                                         );
