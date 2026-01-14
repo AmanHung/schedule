@@ -813,7 +813,8 @@
                                                         const code = person[3 + realIdx];
                                                         const style = getShiftStyle(code);
                                                         return (
-                                                            <div key={dIdx} onClick={() => handleShiftClick(code)} className="border-r border-gray-100 last:border-r-0 p-1 flex items-center justify-center cursor-pointer">
+                                                            /* 修改處：移除了 onClick 與 cursor-pointer */
+                                                            <div key={dIdx} className="border-r border-gray-100 last:border-r-0 p-1 flex items-center justify-center">
                                                                 {code && code !== '-' && ( <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${style.replace('border-l-4', '').replace('border', '')}`}>{code}</span> )}
                                                             </div>
                                                         );
@@ -843,3 +844,4 @@
     </script>
 </body>
 </html>
+
