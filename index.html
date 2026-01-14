@@ -322,25 +322,33 @@
             const onTouchEnd = () => {
                 if (!touchStart || !touchEnd) return;
                 const distance = touchStart - touchEnd;
-                const isLeftSwipe = distance > minSwipeDistance;
-                const isRightSwipe = distance < -minSwipeDistance;
+                
+                // --- 修改邏輯：根據滑動距離計算跳轉天數 (Step) ---
+                // 使用 Math.floor 取整數，例如滑動 120px / 50px = 2 (跳轉 2 天)
+                // 只有當距離大於 minSwipeDistance (50) 時，step 才會大於 0
+                const step = Math.floor(Math.abs(distance) / minSwipeDistance);
 
-                // 每日人員模式滑動
-                if (activeTab === 'daily') {
-                    if (isLeftSwipe && selectedDayIndex < scheduleData.headers.length - 1) {
-                        setSelectedDayIndex(prev => prev + 1);
-                    }
-                    if (isRightSwipe && selectedDayIndex > 0) {
-                        setSelectedDayIndex(prev => prev - 1);
-                    }
-                } 
-                // 總班表模式滑動 (Matrix View)
-                else if (activeTab === 'matrix') {
-                    if (isLeftSwipe && matrixStartIndex < scheduleData.headers.length - 5) {
-                        setMatrixStartIndex(prev => prev + 1);
-                    }
-                    if (isRightSwipe && matrixStartIndex > 0) {
-                        setMatrixStartIndex(prev => prev - 1);
+                if (step > 0) {
+                    // 判斷方向：distance > 0 為向左滑 (看下一天)，< 0 為向右滑 (看前一天)
+                    const isNext = distance > 0;
+                    const direction = isNext ? 1 : -1;
+                    const shiftAmount = step * direction;
+
+                    // 每日人員模式滑動
+                    if (activeTab === 'daily') {
+                        setSelectedDayIndex(prev => {
+                            const newIndex = prev + shiftAmount;
+                            // 邊界檢查：確保不會滑超過第一天或最後一天
+                            return Math.max(0, Math.min(newIndex, scheduleData.headers.length - 1));
+                        });
+                    } 
+                    // 總班表模式滑動 (Matrix View)
+                    else if (activeTab === 'matrix') {
+                        setMatrixStartIndex(prev => {
+                            const newIndex = prev + shiftAmount;
+                            // 邊界檢查：總班表一次顯示 5 天，所以最大索引要減 5
+                            return Math.max(0, Math.min(newIndex, scheduleData.headers.length - 5));
+                        });
                     }
                 }
                 
@@ -940,3 +948,4 @@
     </script>
 </body>
 </html>
+
