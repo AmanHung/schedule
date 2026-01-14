@@ -204,9 +204,10 @@
             // Matrix View State (總班表狀態)
             const [matrixStartIndex, setMatrixStartIndex] = useState(0);
 
-            // Touch Swipe State
-            const [touchStart, setTouchStart] = useState(null);
-            const [touchEnd, setTouchEnd] = useState(null);
+            // Touch Swipe State (改用 useRef 避免 re-render 導致的數值延遲或效能問題)
+            const touchStartRef = useRef(null);
+            const touchEndRef = useRef(null);
+            const minSwipeDistance = 30; // 調低閾值：30px (約半個指節寬度) 即可觸發切換，讓加速感更明顯
 
             useEffect(() => {
                 const savedId = localStorage.getItem('lastSelectedPersonId');
@@ -307,29 +308,25 @@
                 }
             }, [scheduleData, currentMonth]);
 
-            // Touch Handlers for Swipe
-            const minSwipeDistance = 50; 
-
+            // Touch Handlers for Swipe (使用 useRef 版本)
             const onTouchStart = (e) => {
-                setTouchEnd(null); // Reset touch end to prevent jumpy behavior
-                setTouchStart(e.targetTouches[0].clientX);
+                touchEndRef.current = null; // 重置結束點
+                touchStartRef.current = e.targetTouches[0].clientX;
             };
 
             const onTouchMove = (e) => {
-                setTouchEnd(e.targetTouches[0].clientX);
+                touchEndRef.current = e.targetTouches[0].clientX;
             };
 
             const onTouchEnd = () => {
-                if (!touchStart || !touchEnd) return;
-                const distance = touchStart - touchEnd;
+                if (touchStartRef.current === null || touchEndRef.current === null) return;
+                const distance = touchStartRef.current - touchEndRef.current;
                 
-                // --- 修改邏輯：根據滑動距離計算跳轉天數 (Step) ---
-                // 使用 Math.floor 取整數，例如滑動 120px / 50px = 2 (跳轉 2 天)
-                // 只有當距離大於 minSwipeDistance (50) 時，step 才會大於 0
+                // 計算跳轉倍率: 距離 / 30px，取整數
+                // 例: 滑動 90px -> 3 天
                 const step = Math.floor(Math.abs(distance) / minSwipeDistance);
 
                 if (step > 0) {
-                    // 判斷方向：distance > 0 為向左滑 (看下一天)，< 0 為向右滑 (看前一天)
                     const isNext = distance > 0;
                     const direction = isNext ? 1 : -1;
                     const shiftAmount = step * direction;
@@ -338,7 +335,7 @@
                     if (activeTab === 'daily') {
                         setSelectedDayIndex(prev => {
                             const newIndex = prev + shiftAmount;
-                            // 邊界檢查：確保不會滑超過第一天或最後一天
+                            // 邊界檢查
                             return Math.max(0, Math.min(newIndex, scheduleData.headers.length - 1));
                         });
                     } 
@@ -346,14 +343,14 @@
                     else if (activeTab === 'matrix') {
                         setMatrixStartIndex(prev => {
                             const newIndex = prev + shiftAmount;
-                            // 邊界檢查：總班表一次顯示 5 天，所以最大索引要減 5
+                            // 邊界檢查
                             return Math.max(0, Math.min(newIndex, scheduleData.headers.length - 5));
                         });
                     }
                 }
                 
-                setTouchStart(null);
-                setTouchEnd(null);
+                touchStartRef.current = null;
+                touchEndRef.current = null;
             };
 
             // ==========================================
@@ -948,4 +945,3 @@
     </script>
 </body>
 </html>
-
