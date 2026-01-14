@@ -143,7 +143,7 @@
                                 <i data-lucide="arrow-left-right" className="w-8 h-8"></i>
                             </div>
                             <h3 className="text-xl font-bold text-gray-800">確認申請換班？</h3>
-                            <p className="text-sm text-gray-500 mt-2">您將送出以下換班申請，待主管核定後生效。</p>
+                            <p className="text-sm text-gray-500 mt-2">系統將自動複製換班訊息，<br/>請於確認後<b>貼給組長</b>核示。</p>
                         </div>
                         <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
                             <div className="flex justify-between items-center">
@@ -158,14 +158,17 @@
                         </div>
                         <div className="flex gap-3">
                             <button onClick={onClose} className="flex-1 py-3 border border-gray-300 rounded-lg text-gray-600 font-bold hover:bg-gray-50 transition">取消</button>
-                            <button onClick={onConfirm} className="flex-1 py-3 bg-blue-600 rounded-lg text-white font-bold hover:bg-blue-700 shadow-md transition">確認換班</button>
+                            <button onClick={onConfirm} className="flex-1 py-3 bg-blue-600 rounded-lg text-white font-bold hover:bg-blue-700 shadow-md transition flex items-center justify-center gap-2">
+                                <i data-lucide="copy" className="w-4 h-4"></i>
+                                確認並複製
+                            </button>
                         </div>
                     </div>
                 </div>
             );
         };
 
-        // Calendar Grid Component (Modified for Swap Mode)
+        // Calendar Grid Component
         const CalendarGrid = ({ headers, person, comparePerson, currentMonth, startCol, getShiftStyle, getDateStyleInfo, onDayClick, isSwapMode, swapSelection, onSwapSelect }) => {
             return (
                 <div className={`bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden ${isSwapMode ? 'ring-4 ring-blue-500/30' : ''}`}>
@@ -325,10 +328,8 @@
 
             const handleSwapSelect = (idx, date, myCode, targetCode) => {
                 if (!swapSelection.source) {
-                    // Select Source (My Shift)
                     setSwapSelection({ ...swapSelection, source: { idx, date, code: myCode } });
                 } else if (!swapSelection.target) {
-                    // Select Target (Target Shift)
                     const targetPerson = scheduleData.data.find(p => p[1] === comparePersonId);
                     setSwapSelection({ 
                         ...swapSelection, 
@@ -338,29 +339,55 @@
                 }
             };
 
-            const confirmSwap = () => {
+            // --- 新增：刪除申請紀錄函式 ---
+            const handleDeleteRequest = (id) => {
+                if(!confirm("確定要刪除這筆換班申請紀錄嗎？")) return;
+                const updatedRequests = swapRequests.filter(req => req.id !== id);
+                setSwapRequests(updatedRequests);
+                localStorage.setItem('swapRequests', JSON.stringify(updatedRequests));
+            };
+
+            // --- 修改：確認並複製文字函式 ---
+            const confirmSwap = async () => {
+                const applicantName = scheduleData.data.find(p => p[1] === selectedPersonId)?.[2] || "我";
+                const targetName = swapSelection.target.name;
+                const sDate = swapSelection.source.date;
+                const sCode = swapSelection.source.code;
+                const tDate = swapSelection.target.date;
+                const tCode = swapSelection.target.code;
+
                 const newRequest = {
                     id: Date.now(),
                     applicantId: selectedPersonId,
                     targetId: comparePersonId,
-                    applicantName: scheduleData.data.find(p => p[1] === selectedPersonId)?.[2],
-                    targetName: swapSelection.target.name,
-                    sourceDate: swapSelection.source.date,
-                    sourceCode: swapSelection.source.code,
-                    targetDate: swapSelection.target.date,
-                    targetCode: swapSelection.target.code,
-                    status: "pending", // pending, processed
+                    applicantName: applicantName,
+                    targetName: targetName,
+                    sourceDate: sDate,
+                    sourceCode: sCode,
+                    targetDate: tDate,
+                    targetCode: tCode,
+                    status: "pending", 
                     timestamp: new Date().toISOString()
                 };
+
+                // 生成複製文字
+                const copyText = `您好，我是${applicantName}，想用 ${sDate} 的 ${sCode} 班，與 ${targetName} 在 ${tDate} 的 ${tCode} 班互換，請組長核示。`;
+
+                try {
+                    await navigator.clipboard.writeText(copyText);
+                    alert("✅ 已複製申請文字！\n請貼上並傳送給組長核確認。");
+                } catch (err) {
+                    console.error("Copy failed", err);
+                    alert("⚠️ 自動複製失敗，請手動輸入換班訊息。");
+                }
+
                 const updatedRequests = [newRequest, ...swapRequests];
                 setSwapRequests(updatedRequests);
                 localStorage.setItem('swapRequests', JSON.stringify(updatedRequests));
                 
-                // Reset
                 setShowSwapConfirm(false);
                 setSwapSelection({ source: null, target: null });
                 setIsSwapMode(false);
-                alert("換班申請已送出！請通知主管核定。");
             };
 
             const cancelSwapMode = () => {
@@ -368,27 +395,19 @@
                 setSwapSelection({ source: null, target: null });
             };
 
-            // Check Status Logic (Auto Update)
+            // Check Status Logic
             const getRequestStatus = (req) => {
-                // If already processed locally, stay processed
-                // Check if schedule data matches the request (Means Manager updated it)
                 const person = scheduleData.data.find(p => p[1] === req.applicantId);
                 const target = scheduleData.data.find(p => p[1] === req.targetId);
-                
                 if (!person || !target) return req.status;
 
                 const sourceDateIdx = scheduleData.headers.indexOf(req.sourceDate);
                 const targetDateIdx = scheduleData.headers.indexOf(req.targetDate);
-
                 if (sourceDateIdx === -1 || targetDateIdx === -1) return req.status;
 
-                // Check: Did I get the target code on target date?
                 const myNewShift = person[3 + targetDateIdx]; 
-                // Check: Did Target get my source code on source date?
                 const targetNewShift = target[3 + sourceDateIdx];
 
-                // Simple check: If my shift on target date is now the target code (or similar), assume processed
-                // Note: This logic assumes a direct swap.
                 if (myNewShift === req.targetCode && targetNewShift === req.sourceCode) {
                     return "processed";
                 }
@@ -490,7 +509,7 @@
                                     />
                                 )}
 
-                                {/* Local Requests Display */}
+                                {/* Local Requests Display with Delete Button */}
                                 {swapRequests.length > 0 && (
                                     <div className="mt-6">
                                         <h3 className="text-sm font-bold text-gray-500 mb-2 px-1">您的換班申請紀錄</h3>
@@ -498,8 +517,15 @@
                                             {swapRequests.map(req => {
                                                 const currentStatus = getRequestStatus(req);
                                                 return (
-                                                    <div key={req.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm text-sm">
-                                                        <div className="flex justify-between items-center mb-1">
+                                                    <div key={req.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm text-sm relative">
+                                                        <button 
+                                                            onClick={() => handleDeleteRequest(req.id)}
+                                                            className="absolute top-2 right-2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition"
+                                                            title="刪除紀錄"
+                                                        >
+                                                            <i data-lucide="trash-2" className="w-4 h-4"></i>
+                                                        </button>
+                                                        <div className="flex justify-between items-center mb-1 pr-8">
                                                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${currentStatus === 'processed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                                                                 {currentStatus === 'processed' ? '已處理' : '申請中'}
                                                             </span>
@@ -520,9 +546,8 @@
                         )}
 
                         {activeTab === 'daily' && (
-                            /* Daily View Logic (Simplified for brevity, keeps original features) */
+                            /* Daily View Logic */
                             <div className="animate-fade-in">
-                                {/* ... existing daily view code or simplified slider ... */}
                                 <div className="flex overflow-x-auto pb-4 gap-2 hide-scrollbar mb-4 -mx-4 px-4 bg-gray-50 pt-2 border-b">
                                     {scheduleData.headers.map((h, idx) => {
                                         const dateStyle = getDateStyleInfo(h, currentMonth);
@@ -576,10 +601,17 @@
                                         swapRequests.sort((a,b) => b.id - a.id).map(req => {
                                             const status = getRequestStatus(req);
                                             return (
-                                                <div key={req.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                                                <div key={req.id} className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden relative">
                                                     <div className={`h-1 ${status === 'processed' ? 'bg-green-500' : 'bg-yellow-400'}`}></div>
+                                                    <button 
+                                                        onClick={() => handleDeleteRequest(req.id)}
+                                                        className="absolute top-2 right-2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition z-10"
+                                                        title="刪除紀錄"
+                                                    >
+                                                        <i data-lucide="trash-2" className="w-4 h-4"></i>
+                                                    </button>
                                                     <div className="p-4">
-                                                        <div className="flex justify-between items-start mb-3">
+                                                        <div className="flex justify-between items-start mb-3 pr-6">
                                                             <div className="flex items-center gap-2">
                                                                 <span className="font-bold text-gray-800">{req.applicantName}</span>
                                                                 <i data-lucide="arrow-right" className="w-4 h-4 text-gray-400"></i>
