@@ -699,7 +699,7 @@
 
             useEffect(() => {
                 if (activeTab === 'daily') scrollToDay(selectedDayIndex);
-            }, [activeTab]);
+            }, [activeTab, selectedDayIndex]);
 
             useEffect(() => {
                 // 自動跳轉到今日 (若今日在目前顯示的月份中)
@@ -1095,6 +1095,7 @@
     </script>
 </body>
 </html>
+
 
 
 
