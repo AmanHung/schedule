@@ -28,6 +28,10 @@
         // ==========================================
         const GOOGLE_SPREADSHEET_ID = "1OfGyESqORhCNdQRm7kVQkF9jirkpZPO1FNnZxmzFIZc"; 
         const SHIFT_DEF_SHEET_NAME = "班別資料"; 
+        const LEAVE_SHEET_NAME = "預假資料"; // 新增：預假資料分頁名稱
+        
+        // ★ 請在此填入您的 Google 表單連結 (讓大家點擊申請用)
+        const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSf_g-HUDPQfd8z4pO7Hxa4sAotXM9aFqFAo8k2qF8c_H_REUA/viewform"; 
 
         const HOLIDAYS = {
             "2026-01-01": "元旦", "2026-02-16": "除夕", "2026-02-17": "春節", "2026-02-18": "初二", "2026-02-19": "初三",
@@ -71,6 +75,42 @@
             const data = rows.slice(headerRowIndex + 1).filter(row => row.length > 3 && row[2]); 
             const dateHeaders = headers.slice(3).map(h => h);
             return { headers: dateHeaders, data, rawHeaders: headers };
+        };
+
+        // 新增：處理預假資料
+        const processLeaveData = (csvText) => {
+            const rows = parseCSV(csvText);
+            const leaveMap = {}; // Key: YYYY-MM-DD, Value: Array of {name, type}
+            
+            // 預期 CSV 欄位: Timestamp(0), Name(1), StartDate(2), EndDate(3), Type/Note(4)
+            for(let i=1; i<rows.length; i++) {
+                const row = rows[i];
+                if (row.length < 4) continue;
+                
+                const name = row[1];
+                const startDateStr = row[2]; 
+                const endDateStr = row[3];
+                const type = row[4] || "休假";
+
+                if (!name || !startDateStr || !endDateStr) continue;
+
+                let current = new Date(startDateStr);
+                const end = new Date(endDateStr);
+                
+                if (isNaN(current.getTime()) || isNaN(end.getTime())) continue;
+
+                // 處理跨日休假
+                while (current <= end) {
+                    const dateStr = current.toISOString().split('T')[0];
+                    if (!leaveMap[dateStr]) leaveMap[dateStr] = [];
+                    // 避免重複添加
+                    if (!leaveMap[dateStr].some(l => l.name === name)) {
+                        leaveMap[dateStr].push({ name, type });
+                    }
+                    current.setDate(current.getDate() + 1);
+                }
+            }
+            return leaveMap;
         };
 
         // ==========================================
@@ -245,12 +285,76 @@
             );
         };
 
+        // 新增：預假看板元件
+        const LeaveBoard = ({ headers, currentMonth, startCol, getDateStyleInfo, leaveData }) => {
+            return (
+                <div className="space-y-4">
+                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex justify-between items-center">
+                        <div>
+                            <h2 className="text-lg font-bold text-orange-800 flex items-center gap-2">
+                                <i data-lucide="palmtree" className="w-5 h-5"></i> 預假看板
+                            </h2>
+                            <p className="text-xs text-orange-600 mt-1">此看板僅供參考，實際准駁請以主管核示為準。</p>
+                        </div>
+                        <a 
+                            href={GOOGLE_FORM_URL} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold px-4 py-2 rounded-full shadow transition flex items-center gap-2"
+                        >
+                            <i data-lucide="plus-circle" className="w-4 h-4"></i> 我要預假
+                        </a>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200 text-center py-2 text-xs font-bold text-gray-500">
+                            <div className="text-red-400">日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div className="text-green-600">六</div>
+                        </div>
+                        <div className="grid grid-cols-7 gap-px bg-gray-200">
+                            {headers.map((date, idx) => {
+                                // 轉換日期格式
+                                const dayNum = date.replace(/[^0-9]/g, '');
+                                const fullDate = `${currentMonth}-${dayNum.padStart(2, '0')}`;
+                                
+                                const dateStyle = getDateStyleInfo(date, currentMonth);
+                                const gridClass = idx === 0 ? `col-start-${startCol}` : '';
+                                
+                                const daysLeaves = leaveData[fullDate] || [];
+
+                                return (
+                                    <div key={idx} className={`bg-white min-h-[100px] p-1 flex flex-col justify-start hover:bg-orange-50/30 transition group ${gridClass}`}>
+                                        <div className="flex justify-between items-start mb-1">
+                                            <div className={`text-xs font-medium pl-1 ${dateStyle.colorClass}`}>{dayNum}</div>
+                                            {dateStyle.type === 'holiday' && <span className="text-[10px] bg-red-100 text-red-600 px-1 rounded transform scale-90 origin-right">{dateStyle.label}</span>}
+                                        </div>
+                                        <div className="flex flex-col gap-1 overflow-y-auto max-h-[85px] hide-scrollbar">
+                                            {daysLeaves.length > 0 ? (
+                                                daysLeaves.map((l, lIdx) => (
+                                                    <div key={lIdx} className="text-[10px] font-bold py-1 px-1.5 bg-orange-100 text-orange-800 rounded flex items-center justify-between shadow-sm border border-orange-200">
+                                                        <span className="truncate">{l.name}</span>
+                                                        <span className="text-[9px] opacity-70 ml-1 whitespace-nowrap">{l.type.substring(0,1)}</span>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="flex-grow"></div>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
             const [currentMonth, setCurrentMonth] = useState("2026-01");
             const [activeTab, setActiveTab] = useState("personal");
             const [scheduleData, setScheduleData] = useState({ headers: [], data: [] });
             const [shiftDefs, setShiftDefs] = useState({});
             const [shiftOrder, setShiftOrder] = useState([]);
+            const [leaveData, setLeaveData] = useState({}); 
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState(null);
             
@@ -273,7 +377,7 @@
             const touchStartRef = useRef(null);
             const touchEndRef = useRef(null);
             const minSwipeDistance = 80; 
-            const scrollRef = useRef(null); // For daily slider
+            const scrollRef = useRef(null); 
 
             // Helper: Date Style
             const getDateStyleInfo = (headerStr, currentMonth) => {
@@ -315,12 +419,23 @@
                     setLoading(true); setError(null); setScheduleData({ headers: [], data: [] });
                     try {
                         const baseUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
-                        const [resDefs, resSched] = await Promise.all([ 
+                        
+                        const [resDefs, resSched, resLeave] = await Promise.all([ 
                             fetch(`${baseUrl}&sheet=${encodeURIComponent(SHIFT_DEF_SHEET_NAME)}`), 
-                            fetch(`${baseUrl}&sheet=${encodeURIComponent(currentMonth)}`) 
+                            fetch(`${baseUrl}&sheet=${encodeURIComponent(currentMonth)}`),
+                            fetch(`${baseUrl}&sheet=${encodeURIComponent(LEAVE_SHEET_NAME)}`).catch(() => null) 
                         ]);
+
                         const defsText = await resDefs.text();
                         const scheduleText = await resSched.text();
+                        
+                        let leaveDataMap = {};
+                        if (resLeave && resLeave.ok) {
+                            const leaveText = await resLeave.text();
+                            leaveDataMap = processLeaveData(leaveText);
+                        }
+                        setLeaveData(leaveDataMap);
+
                         if (scheduleText.includes("<!DOCTYPE html")) throw new Error("Permission Denied");
                         
                         const { defs, order } = processShiftDefs(defsText);
@@ -429,7 +544,6 @@
                 setActiveTab('daily');
             };
 
-            // Check Status Logic
             const getRequestStatus = (req) => {
                 const person = scheduleData.data.find(p => p[1] === req.applicantId);
                 const target = scheduleData.data.find(p => p[1] === req.targetId);
@@ -448,7 +562,6 @@
                 return "pending";
             };
 
-            // Touch Handlers
             const onTouchStart = (e) => { touchEndRef.current = null; touchStartRef.current = e.targetTouches[0].clientX; };
             const onTouchMove = (e) => { touchEndRef.current = e.targetTouches[0].clientX; };
             const onTouchEnd = () => {
@@ -469,7 +582,6 @@
                 touchStartRef.current = null; touchEndRef.current = null;
             };
 
-            // Scroll to day in Daily view
             const scrollToDay = (index) => {
                 setTimeout(() => {
                     const container = scrollRef.current;
@@ -485,7 +597,6 @@
                 if (activeTab === 'daily') scrollToDay(selectedDayIndex);
             }, [activeTab]);
 
-            // Auto select current day
             useEffect(() => {
                 if (scheduleData.headers.length === 0) return;
                 const today = new Date();
@@ -494,7 +605,7 @@
                     const todayDate = today.getDate(); 
                     const foundIndex = scheduleData.headers.findIndex(h => parseInt(h.replace(/[^0-9]/g, '')) === todayDate);
                     if (foundIndex !== -1) {
-                        if (activeTab !== 'daily' && activeTab !== 'matrix') {
+                        if (activeTab !== 'daily' && activeTab !== 'matrix' && activeTab !== 'leave') {
                             setSelectedDayIndex(foundIndex);
                             setMatrixStartIndex(Math.min(foundIndex, Math.max(0, scheduleData.headers.length - 5)));
                         }
@@ -530,10 +641,11 @@
                                 <button onClick={() => handleMonthChange(1)} className="p-1.5 hover:bg-blue-700 rounded-md transition"><i data-lucide="chevron-right" className="w-5 h-5"></i></button>
                             </div>
                         </div>
-                        <div className="flex bg-blue-800 p-1 rounded-lg">
-                            <button onClick={() => setActiveTab('daily')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${activeTab === 'daily' ? 'bg-white text-blue-800 shadow' : 'text-blue-200 hover:text-white'}`}>每日人員</button>
-                            <button onClick={() => setActiveTab('personal')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${activeTab === 'personal' ? 'bg-white text-blue-800 shadow' : 'text-blue-200 hover:text-white'}`}>個人班表</button>
-                            <button onClick={() => setActiveTab('matrix')} className={`flex-1 py-2 text-sm font-medium rounded-md transition ${activeTab === 'matrix' ? 'bg-white text-blue-800 shadow' : 'text-blue-200 hover:text-white'}`}>總班表</button>
+                        <div className="flex bg-blue-800 p-1 rounded-lg overflow-x-auto hide-scrollbar">
+                            <button onClick={() => setActiveTab('daily')} className={`flex-1 min-w-[70px] py-2 text-sm font-medium rounded-md transition ${activeTab === 'daily' ? 'bg-white text-blue-800 shadow' : 'text-blue-200 hover:text-white'}`}>每日</button>
+                            <button onClick={() => setActiveTab('personal')} className={`flex-1 min-w-[70px] py-2 text-sm font-medium rounded-md transition ${activeTab === 'personal' ? 'bg-white text-blue-800 shadow' : 'text-blue-200 hover:text-white'}`}>個人</button>
+                            <button onClick={() => setActiveTab('matrix')} className={`flex-1 min-w-[70px] py-2 text-sm font-medium rounded-md transition ${activeTab === 'matrix' ? 'bg-white text-blue-800 shadow' : 'text-blue-200 hover:text-white'}`}>總表</button>
+                            <button onClick={() => setActiveTab('leave')} className={`flex-1 min-w-[80px] py-2 text-sm font-medium rounded-md transition flex items-center justify-center gap-1 ${activeTab === 'leave' ? 'bg-orange-100 text-orange-800 shadow font-bold' : 'text-orange-200 hover:text-white'}`}><i data-lucide="palmtree" className="w-3 h-3"></i>預假</button>
                         </div>
                     </header>
 
@@ -667,7 +779,7 @@
                             </div>
                         )}
 
-                        {/* VIEW: DAILY (修復版) */}
+                        {/* VIEW: DAILY */}
                         {activeTab === 'daily' && scheduleData.headers.length > 0 && (
                             <div className="animate-fade-in">
                                 {/* Date Slider */}
@@ -813,7 +925,6 @@
                                                         const code = person[3 + realIdx];
                                                         const style = getShiftStyle(code);
                                                         return (
-                                                            /* 修改處：移除了 onClick 與 cursor-pointer */
                                                             <div key={dIdx} className="border-r border-gray-100 last:border-r-0 p-1 flex items-center justify-center">
                                                                 {code && code !== '-' && ( <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${style.replace('border-l-4', '').replace('border', '')}`}>{code}</span> )}
                                                             </div>
@@ -827,6 +938,20 @@
                                 <div className="mt-2 text-center text-xs text-gray-400"><i data-lucide="move-horizontal" className="inline w-3 h-3 mr-1"></i>左右滑動可切換日期</div>
                             </div>
                         )}
+
+                        {/* VIEW: LEAVE BOARD */}
+                        {activeTab === 'leave' && (
+                            <div className="animate-fade-in">
+                                <LeaveBoard 
+                                    headers={scheduleData.headers}
+                                    currentMonth={currentMonth}
+                                    startCol={scheduleData.headers.length > 0 ? new Date(currentMonth + "-01").getDay() + 1 : 1}
+                                    getDateStyleInfo={getDateStyleInfo}
+                                    leaveData={leaveData}
+                                />
+                            </div>
+                        )}
+
                     </main>
 
                     {/* Modals */}
@@ -844,4 +969,3 @@
     </script>
 </body>
 </html>
-
