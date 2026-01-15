@@ -405,13 +405,17 @@
 
         const App = () => {
             const [currentMonth, setCurrentMonth] = useState("2026-01");
-            const [activeTab, setActiveTab] = useState("personal");
+            const [activeTab, setActiveTab] = useState(localStorage.getItem('lastActiveTab') || "personal");
             const [scheduleData, setScheduleData] = useState({ headers: [], data: [] });
             const [shiftDefs, setShiftDefs] = useState({});
             const [shiftOrder, setShiftOrder] = useState([]);
             const [leaveData, setLeaveData] = useState({}); 
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState(null);
+            // ★ 新增處：當分頁切換時，自動紀錄到 localStorage
+            useEffect(() => {
+                localStorage.setItem('lastActiveTab', activeTab);
+            }, [activeTab]);
             
             // Interaction States
             const [viewingShiftCode, setViewingShiftCode] = useState(null);
@@ -1065,6 +1069,7 @@
     </script>
 </body>
 </html>
+
 
 
 
