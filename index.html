@@ -285,22 +285,51 @@
             );
         };
 
-        // 新增：預假看板元件 (含年度統計功能)
+        // 新增：預假看板元件 (含：排除假日計算 + 人員顏色區隔)
         const LeaveBoard = ({ headers, currentMonth, startCol, getDateStyleInfo, leaveData }) => {
             
-            // ★ 新增邏輯：計算該年度每人的累積預假天數
+            // 定義姓名標籤的配色盤 (排除紅色系以免跟國定假日混淆)
+            const colorPalette = [
+                "bg-blue-100 text-blue-800 border-blue-200",
+                "bg-green-100 text-green-800 border-green-200",
+                "bg-purple-100 text-purple-800 border-purple-200",
+                "bg-indigo-100 text-indigo-800 border-indigo-200",
+                "bg-teal-100 text-teal-800 border-teal-200",
+                "bg-pink-100 text-pink-800 border-pink-200",
+                "bg-cyan-100 text-cyan-800 border-cyan-200",
+                "bg-emerald-100 text-emerald-800 border-emerald-200",
+                "bg-violet-100 text-violet-800 border-violet-200",
+                "bg-orange-100 text-orange-800 border-orange-200", // 原本的顏色放到最後
+            ];
+
+            // 根據姓名產生固定的顏色索引
+            const getColorFromName = (name) => {
+                if (!name) return colorPalette[0];
+                let sum = 0;
+                for (let i = 0; i < name.length; i++) {
+                    sum += name.charCodeAt(i);
+                }
+                return colorPalette[sum % colorPalette.length];
+            };
+
+            // 年度預假統計 (排除六日)
             const annualCounts = useMemo(() => {
                 const counts = {};
-                const currentYear = currentMonth.split('-')[0]; // 取得目前檢視的年份 (例如 "2026")
+                const currentYear = currentMonth.split('-')[0]; 
 
-                // 遍歷所有預假資料
                 Object.entries(leaveData).forEach(([date, leaves]) => {
-                    // 只統計符合「當前年份」的日期
                     if (date.startsWith(currentYear)) {
-                        leaves.forEach(person => {
-                            // 累加該員的休假天數
-                            counts[person.name] = (counts[person.name] || 0) + 1;
-                        });
+                        // ★ 關鍵修改：判斷是否為假日
+                        // date 格式為 YYYY-MM-DD，直接轉 Date 物件
+                        // 使用 getUTCDay() 避免時區問題導致日期偏移 (0=週日, 6=週六)
+                        const dayOfWeek = new Date(date).getUTCDay();
+                        
+                        // 只有當「不是週日 (0)」且「不是週六 (6)」才計入
+                        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                            leaves.forEach(person => {
+                                counts[person.name] = (counts[person.name] || 0) + 1;
+                            });
+                        }
                     }
                 });
                 return counts;
@@ -315,7 +344,7 @@
                                 <i data-lucide="palmtree" className="w-5 h-5"></i> 預假看板
                             </h2>
                             <p className="text-xs text-orange-600">
-                                顯示數字為 {currentMonth.split('-')[0]} 年度累計預假天數
+                                {currentMonth.split('-')[0]} 年度累計 (不含六日)
                             </p>
                         </div>
                         <a 
@@ -335,7 +364,6 @@
                         </div>
                         <div className="grid grid-cols-7 gap-px bg-gray-200">
                             {headers.map((date, idx) => {
-                                // 轉換日期格式
                                 const dayNum = date.replace(/[^0-9]/g, '');
                                 const fullDate = `${currentMonth}-${dayNum.padStart(2, '0')}`;
                                 
@@ -352,13 +380,16 @@
                                         </div>
                                         <div className="flex flex-col gap-1 overflow-y-auto max-h-[85px] hide-scrollbar">
                                             {daysLeaves.length > 0 ? (
-                                                daysLeaves.map((l, lIdx) => (
-                                                    <div key={lIdx} className="text-[10px] font-bold py-1 px-1.5 bg-orange-100 text-orange-800 rounded flex items-center justify-between shadow-sm border border-orange-200">
-                                                        {/* ★ 修改處：顯示姓名與累計天數 */}
-                                                        <span className="truncate">{l.name}({annualCounts[l.name] || 0})</span>
-                                                        <span className="text-[9px] opacity-70 ml-1 whitespace-nowrap">{l.type.substring(0,1)}</span>
-                                                    </div>
-                                                ))
+                                                daysLeaves.map((l, lIdx) => {
+                                                    // ★ 取得該員的專屬顏色
+                                                    const colorClass = getColorFromName(l.name);
+                                                    return (
+                                                        <div key={lIdx} className={`text-[10px] font-bold py-1 px-1.5 rounded flex items-center justify-between shadow-sm border ${colorClass}`}>
+                                                            <span className="truncate">{l.name}({annualCounts[l.name] || 0})</span>
+                                                            <span className="text-[9px] opacity-70 ml-1 whitespace-nowrap">{l.type.substring(0,1)}</span>
+                                                        </div>
+                                                    );
+                                                })
                                             ) : (
                                                 <div className="flex-grow"></div>
                                             )}
@@ -409,8 +440,8 @@
                 const dayNum = headerStr.replace(/[^0-9]/g, '');
                 const fullDate = `${currentMonth}-${dayNum.padStart(2, '0')}`;
                 if (HOLIDAYS[fullDate]) return { type: 'holiday', label: HOLIDAYS[fullDate], colorClass: 'text-red-600 font-bold', bgClass: 'bg-red-50 border-red-200'};
-                if (headerStr.includes('六')) return { type: 'weekend-sat', colorClass: 'text-green-600 font-bold', bgClass: 'bg-green-50 border-green-200' };
-                if (headerStr.includes('日')) return { type: 'weekend-sun', colorClass: 'text-red-500 font-bold', bgClass: 'bg-red-50 border-red-200' };
+                if (headerStr.includes('六') || new Date(fullDate).getDay() === 6) return { type: 'weekend-sat', colorClass: 'text-green-600 font-bold', bgClass: 'bg-green-50 border-green-200' };
+                if (headerStr.includes('日') || new Date(fullDate).getDay() === 0) return { type: 'weekend-sun', colorClass: 'text-red-500 font-bold', bgClass: 'bg-red-50 border-red-200' };
                 return { type: 'normal', colorClass: 'text-gray-600', bgClass: 'bg-white border-gray-200' };
             };
 
@@ -429,6 +460,15 @@
                 return shiftDefs[cleanCode] || { time: "", desc: "" };
             };
 
+            // ★ 新增：自動產生該月份日期的 Helper
+            const getMonthDays = (yearMonth) => {
+                const [year, month] = yearMonth.split('-').map(Number);
+                // 取得該月有幾天 (設為下個月的第0天即為本月最後一天)
+                const daysInMonth = new Date(year, month, 0).getDate();
+                // 回傳 ["1", "2", ..., "30"]
+                return Array.from({length: daysInMonth}, (_, i) => String(i + 1));
+            };
+
             // Initial Load & Storage
             useEffect(() => {
                 const savedId = localStorage.getItem('lastSelectedPersonId');
@@ -444,14 +484,23 @@
                     try {
                         const baseUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
                         
+                        // ★ 修改重點：允許班表抓取失敗 (代表該月還沒排班)，不拋出錯誤
                         const [resDefs, resSched, resLeave] = await Promise.all([ 
                             fetch(`${baseUrl}&sheet=${encodeURIComponent(SHIFT_DEF_SHEET_NAME)}`), 
-                            fetch(`${baseUrl}&sheet=${encodeURIComponent(currentMonth)}`),
+                            fetch(`${baseUrl}&sheet=${encodeURIComponent(currentMonth)}`).then(res => res.ok ? res : null).catch(() => null),
                             fetch(`${baseUrl}&sheet=${encodeURIComponent(LEAVE_SHEET_NAME)}`).catch(() => null) 
                         ]);
 
                         const defsText = await resDefs.text();
-                        const scheduleText = await resSched.text();
+                        
+                        // 處理班表資料 (若 resSched 存在且內容正常才處理)
+                        if (resSched) {
+                            const scheduleText = await resSched.text();
+                            // Google Sheet 若找不到分頁有時會回傳 HTML 錯誤或 status:error
+                            if (!scheduleText.includes("<!DOCTYPE html") && !scheduleText.includes("status: 'error'")) {
+                                setScheduleData(processSchedule(scheduleText));
+                            }
+                        }
                         
                         let leaveDataMap = {};
                         if (resLeave && resLeave.ok) {
@@ -460,12 +509,10 @@
                         }
                         setLeaveData(leaveDataMap);
 
-                        if (scheduleText.includes("<!DOCTYPE html")) throw new Error("Permission Denied");
-                        
                         const { defs, order } = processShiftDefs(defsText);
                         setShiftDefs(defs);
                         setShiftOrder(order);
-                        setScheduleData(processSchedule(scheduleText));
+
                     } catch (e) { console.error(e); setError("無法讀取資料"); } 
                     finally { setLoading(false); }
                 };
@@ -598,9 +645,12 @@
                     const shiftAmount = step * direction;
 
                     if (activeTab === 'daily') {
-                        setSelectedDayIndex(prev => Math.max(0, Math.min(prev + shiftAmount, scheduleData.headers.length - 1)));
+                        // 修正：如果 scheduleData.headers 為空，使用 getMonthDays 來計算長度
+                        const headerLength = scheduleData.headers.length > 0 ? scheduleData.headers.length : getMonthDays(currentMonth).length;
+                        setSelectedDayIndex(prev => Math.max(0, Math.min(prev + shiftAmount, headerLength - 1)));
                     } else if (activeTab === 'matrix') {
-                        setMatrixStartIndex(prev => Math.max(0, Math.min(prev + shiftAmount, scheduleData.headers.length - 5)));
+                         const headerLength = scheduleData.headers.length > 0 ? scheduleData.headers.length : getMonthDays(currentMonth).length;
+                        setMatrixStartIndex(prev => Math.max(0, Math.min(prev + shiftAmount, headerLength - 5)));
                     }
                 }
                 touchStartRef.current = null; touchEndRef.current = null;
@@ -622,16 +672,22 @@
             }, [activeTab]);
 
             useEffect(() => {
-                if (scheduleData.headers.length === 0) return;
+                // 自動跳轉到今日 (若今日在目前顯示的月份中)
                 const today = new Date();
                 const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                
+                // 決定要使用的 headers (若無班表則用自動生成的日期)
+                const headersToUse = scheduleData.headers.length > 0 ? scheduleData.headers : getMonthDays(currentMonth);
+
                 if (currentMonth === currentYearMonth) {
                     const todayDate = today.getDate(); 
-                    const foundIndex = scheduleData.headers.findIndex(h => parseInt(h.replace(/[^0-9]/g, '')) === todayDate);
+                    // 尋找今日 (相容 "1" 或 "01" 或 "1/01")
+                    const foundIndex = headersToUse.findIndex(h => parseInt(h.replace(/[^0-9]/g, '')) === todayDate);
+                    
                     if (foundIndex !== -1) {
                         if (activeTab !== 'daily' && activeTab !== 'matrix' && activeTab !== 'leave') {
                             setSelectedDayIndex(foundIndex);
-                            setMatrixStartIndex(Math.min(foundIndex, Math.max(0, scheduleData.headers.length - 5)));
+                            setMatrixStartIndex(Math.min(foundIndex, Math.max(0, headersToUse.length - 5)));
                         }
                     }
                 } else {
@@ -652,6 +708,14 @@
                 const shiftInfo = getShiftInfo(shiftCode);
                 return { isToday: true, dateStr: `${today.getMonth() + 1}/${dayOfMonth}`, shiftCode, shiftInfo };
             };
+
+            // ★ 關鍵：決定目前要顯示的 headers
+            // 如果有班表資料就用班表的，沒有就自動產生該月 1~30 號
+            const displayHeaders = scheduleData.headers.length > 0 ? scheduleData.headers : getMonthDays(currentMonth);
+            
+            // ★ 關鍵：決定起始欄位 (Start Column)
+            // 不管有沒有班表，都直接用 currentMonth 算出 1 號是星期幾
+            const startCol = new Date(currentMonth + "-01").getDay() + 1;
 
             return (
                 <div className="min-h-screen pb-20 max-w-4xl mx-auto bg-white shadow-lg min-h-screen flex flex-col">
@@ -751,11 +815,11 @@
                                 {/* Calendar */}
                                 {selectedPersonId && (
                                     <CalendarGrid 
-                                        headers={scheduleData.headers}
+                                        headers={displayHeaders} // 修正：使用 displayHeaders
                                         person={scheduleData.data.find(p => p[1] === selectedPersonId)}
                                         comparePerson={comparePersonId ? scheduleData.data.find(p => p[1] === comparePersonId) : null}
                                         currentMonth={currentMonth}
-                                        startCol={scheduleData.headers.length > 0 ? new Date(currentMonth + "-01").getDay() + 1 : 1}
+                                        startCol={startCol} // 修正：使用 startCol
                                         getShiftStyle={getShiftStyle}
                                         getDateStyleInfo={getDateStyleInfo}
                                         onDayClick={handleGridDayClick}
@@ -804,14 +868,14 @@
                         )}
 
                         {/* VIEW: DAILY */}
-                        {activeTab === 'daily' && scheduleData.headers.length > 0 && (
+                        {activeTab === 'daily' && (
                             <div className="animate-fade-in">
                                 {/* Date Slider */}
                                 <div 
                                     ref={scrollRef}
                                     className="flex overflow-x-auto pb-4 gap-2 hide-scrollbar mb-4 -mx-4 px-4 bg-gray-50 pt-2 border-b"
                                 >
-                                    {scheduleData.headers.map((dayLabel, idx) => {
+                                    {displayHeaders.map((dayLabel, idx) => {
                                         const dateStyle = getDateStyleInfo(dayLabel, currentMonth);
                                         const isSelected = selectedDayIndex === idx;
                                         return (
@@ -842,10 +906,10 @@
                                 <div className="flex justify-between items-end mb-4">
                                     <h2 className="text-lg font-bold text-gray-800 flex items-center">
                                         <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded mr-2 text-sm">
-                                            {scheduleData.headers[selectedDayIndex]}
+                                            {displayHeaders[selectedDayIndex]}
                                         </span>
                                         {(() => {
-                                            const info = getDateStyleInfo(scheduleData.headers[selectedDayIndex], currentMonth);
+                                            const info = getDateStyleInfo(displayHeaders[selectedDayIndex], currentMonth);
                                             if(info.type === 'holiday') return <span className="mr-2 text-red-600 bg-red-100 px-2 py-0.5 rounded text-xs">{info.label}</span>;
                                             return null;
                                         })()}
@@ -864,9 +928,13 @@
                                     onTouchEnd={onTouchEnd}
                                 >
                                     {(() => {
+                                        // 若無班表資料，直接顯示無資料，但上方日曆可滑動
+                                        if (scheduleData.headers.length === 0) {
+                                            return <div className="text-gray-400 text-center py-16 bg-gray-50 rounded-lg border border-dashed border-gray-200">本月尚未排班，無法顯示當日人員。</div>;
+                                        }
+
                                         const dayShifts = {};
                                         scheduleData.data.forEach(person => {
-                                            // ★ 修改處：取出班別時，加入 .trim() 自動去除前後空白
                                             const rawShift = person[3 + selectedDayIndex]; 
                                             const shift = rawShift ? rawShift.trim() : "";
 
@@ -878,7 +946,6 @@
                                         const sortedShifts = Object.keys(dayShifts).sort((a, b) => {
                                             const idxA = shiftOrder.indexOf(a);
                                             const idxB = shiftOrder.indexOf(b);
-                                            // 若 idx 為 -1 代表該班別沒在「班別資料」中定義，會被排到最後
                                             if(idxA === -1 && idxB === -1) return 0;
                                             if(idxA === -1) return 1;
                                             if(idxB === -1) return -1;
@@ -966,13 +1033,13 @@
                             </div>
                         )}
 
-                        {/* VIEW: LEAVE BOARD */}
+                        {/* VIEW: LEAVE BOARD (使用修正後的 displayHeaders) */}
                         {activeTab === 'leave' && (
                             <div className="animate-fade-in">
                                 <LeaveBoard 
-                                    headers={scheduleData.headers}
+                                    headers={displayHeaders} // ★ 修正：傳入 displayHeaders
                                     currentMonth={currentMonth}
-                                    startCol={scheduleData.headers.length > 0 ? new Date(currentMonth + "-01").getDay() + 1 : 1}
+                                    startCol={startCol}      // ★ 修正：傳入 startCol
                                     getDateStyleInfo={getDateStyleInfo}
                                     leaveData={leaveData}
                                 />
@@ -996,6 +1063,7 @@
     </script>
 </body>
 </html>
+
 
 
 
