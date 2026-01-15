@@ -290,10 +290,10 @@
             );
         };
 
-        // 新增：預假看板元件 (含：排除假日計算 + 人員顏色區隔)
+        // 新增：預假看板元件 (介面優化版：手機完整顯示、移除休字)
         const LeaveBoard = ({ headers, currentMonth, startCol, getDateStyleInfo, leaveData }) => {
             
-            // 定義姓名標籤的配色盤 (排除紅色系以免跟國定假日混淆)
+            // 定義姓名標籤的配色盤
             const colorPalette = [
                 "bg-blue-100 text-blue-800 border-blue-200",
                 "bg-green-100 text-green-800 border-green-200",
@@ -304,7 +304,7 @@
                 "bg-cyan-100 text-cyan-800 border-cyan-200",
                 "bg-emerald-100 text-emerald-800 border-emerald-200",
                 "bg-violet-100 text-violet-800 border-violet-200",
-                "bg-orange-100 text-orange-800 border-orange-200", // 原本的顏色放到最後
+                "bg-orange-100 text-orange-800 border-orange-200", 
             ];
 
             // 根據姓名產生固定的顏色索引
@@ -324,12 +324,10 @@
 
                 Object.entries(leaveData).forEach(([date, leaves]) => {
                     if (date.startsWith(currentYear)) {
-                        // ★ 關鍵修改：判斷是否為假日
-                        // date 格式為 YYYY-MM-DD，直接轉 Date 物件
-                        // 使用 getUTCDay() 避免時區問題導致日期偏移 (0=週日, 6=週六)
+                        // 使用 getUTCDay() 避免時區問題 (0=週日, 6=週六)
                         const dayOfWeek = new Date(date).getUTCDay();
                         
-                        // 只有當「不是週日 (0)」且「不是週六 (6)」才計入
+                        // 排除週六日
                         if (dayOfWeek !== 0 && dayOfWeek !== 6) {
                             leaves.forEach(person => {
                                 counts[person.name] = (counts[person.name] || 0) + 1;
@@ -386,12 +384,16 @@
                                         <div className="flex flex-col gap-1 overflow-y-auto max-h-[85px] hide-scrollbar">
                                             {daysLeaves.length > 0 ? (
                                                 daysLeaves.map((l, lIdx) => {
-                                                    // ★ 取得該員的專屬顏色
                                                     const colorClass = getColorFromName(l.name);
                                                     return (
-                                                        <div key={lIdx} className={`text-[10px] font-bold py-1 px-1.5 rounded flex items-center justify-between shadow-sm border ${colorClass}`}>
-                                                            <span className="truncate">{l.name}({annualCounts[l.name] || 0})</span>
-                                                            <span className="text-[9px] opacity-70 ml-1 whitespace-nowrap">{l.type.substring(0,1)}</span>
+                                                        /* ★ 修改重點：
+                                                           1. 移除 flex, justify-between (不再左右排)
+                                                           2. 移除 truncate (允許換行)
+                                                           3. 加入 text-center, break-words, leading-tight (置中、強制換行、緊湊行高)
+                                                           4. 移除顯示假別的 span (移除"休"字)
+                                                        */
+                                                        <div key={lIdx} className={`text-[10px] font-bold py-1 px-0.5 rounded text-center shadow-sm border leading-tight break-words ${colorClass}`}>
+                                                            {l.name}({annualCounts[l.name] || 0})
                                                         </div>
                                                     );
                                                 })
@@ -1143,6 +1145,7 @@
     </script>
 </body>
 </html>
+
 
 
 
