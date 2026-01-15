@@ -77,7 +77,7 @@
             return { headers: dateHeaders, data, rawHeaders: headers };
         };
 
-        // 新增：處理預假資料
+        // 新增：處理預假資料 (修正版：解決日期少一天問題)
         const processLeaveData = (csvText) => {
             const rows = parseCSV(csvText);
             const leaveMap = {}; // Key: YYYY-MM-DD, Value: Array of {name, type}
@@ -94,8 +94,13 @@
 
                 if (!name || !startDateStr || !endDateStr) continue;
 
+                // ★ 修正重點：建立日期後，強制設定為中午 12:00
+                // 這樣可以避免因為時區轉換 (例如 00:00 - 8小時 = 前一天 16:00) 導致日期跑掉
                 let current = new Date(startDateStr);
+                current.setHours(12, 0, 0, 0); 
+
                 const end = new Date(endDateStr);
+                end.setHours(12, 0, 0, 0);
                 
                 if (isNaN(current.getTime()) || isNaN(end.getTime())) continue;
 
@@ -1069,6 +1074,7 @@
     </script>
 </body>
 </html>
+
 
 
 
