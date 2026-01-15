@@ -834,7 +834,6 @@
                                     </div>
                                 </div>
 
-                                {/* Daily Content with Swipe Handlers */}
                                 <div 
                                     className="flex flex-col gap-2 min-h-[300px]"
                                     onTouchStart={onTouchStart}
@@ -844,7 +843,10 @@
                                     {(() => {
                                         const dayShifts = {};
                                         scheduleData.data.forEach(person => {
-                                            const shift = person[3 + selectedDayIndex]; 
+                                            // ★ 修改處：取出班別時，加入 .trim() 自動去除前後空白
+                                            const rawShift = person[3 + selectedDayIndex]; 
+                                            const shift = rawShift ? rawShift.trim() : "";
+
                                             if(!shift || shift === "-" || shift === "") return;
                                             if(!dayShifts[shift]) dayShifts[shift] = [];
                                             dayShifts[shift].push({name: person[2], id: person[1]});
@@ -853,6 +855,7 @@
                                         const sortedShifts = Object.keys(dayShifts).sort((a, b) => {
                                             const idxA = shiftOrder.indexOf(a);
                                             const idxB = shiftOrder.indexOf(b);
+                                            // 若 idx 為 -1 代表該班別沒在「班別資料」中定義，會被排到最後
                                             if(idxA === -1 && idxB === -1) return 0;
                                             if(idxA === -1) return 1;
                                             if(idxB === -1) return -1;
@@ -970,6 +973,7 @@
     </script>
 </body>
 </html>
+
 
 
 
