@@ -417,10 +417,31 @@
             const [leaveData, setLeaveData] = useState({}); 
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState(null);
-            // ★ 新增處：當分頁切換時，自動紀錄到 localStorage
+           // 自動跳轉到今日 (修正版：移除頁面限制，強制對準今日)
             useEffect(() => {
-                localStorage.setItem('lastActiveTab', activeTab);
-            }, [activeTab]);
+                const today = new Date();
+                const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+                
+                // 決定要使用的 headers
+                const headersToUse = scheduleData.headers.length > 0 ? scheduleData.headers : getMonthDays(currentMonth);
+
+                if (currentMonth === currentYearMonth) {
+                    const todayDate = today.getDate(); 
+                    // 尋找今日
+                    const foundIndex = headersToUse.findIndex(h => parseInt(h.replace(/[^0-9]/g, '')) === todayDate);
+                    
+                    if (foundIndex !== -1) {
+                        // ★ 修改處：直接執行跳轉，不再檢查 activeTab
+                        // 這樣即使重新整理後停在「每日」或「總表」，也會自動對準今天
+                        setSelectedDayIndex(foundIndex);
+                        setMatrixStartIndex(Math.min(foundIndex, Math.max(0, headersToUse.length - 5)));
+                    }
+                } else {
+                    // 非當月則歸零
+                    setSelectedDayIndex(0);
+                    setMatrixStartIndex(0);
+                }
+            }, [scheduleData, currentMonth]); // 僅在資料載入或月份切換時執行
             
             // Interaction States
             const [viewingShiftCode, setViewingShiftCode] = useState(null);
@@ -1074,6 +1095,7 @@
     </script>
 </body>
 </html>
+
 
 
 
