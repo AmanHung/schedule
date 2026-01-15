@@ -1033,13 +1033,15 @@
                             </div>
                         )}
 
-                        {/* VIEW: LEAVE BOARD (使用修正後的 displayHeaders) */}
+                       {/* VIEW: LEAVE BOARD */}
+                        {/* 修改重點：這裡不使用 displayHeaders，而是強制使用 getMonthDays(currentMonth) */}
+                        {/* 這樣可以確保無論班表分頁是否存在、是否空白，預假看板都能畫出完整的當月日曆 */}
                         {activeTab === 'leave' && (
                             <div className="animate-fade-in">
                                 <LeaveBoard 
-                                    headers={displayHeaders} // ★ 修正：傳入 displayHeaders
+                                    headers={getMonthDays(currentMonth)} 
                                     currentMonth={currentMonth}
-                                    startCol={startCol}      // ★ 修正：傳入 startCol
+                                    startCol={startCol}
                                     getDateStyleInfo={getDateStyleInfo}
                                     leaveData={leaveData}
                                 />
@@ -1063,6 +1065,7 @@
     </script>
 </body>
 </html>
+
 
 
 
