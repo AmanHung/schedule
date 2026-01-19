@@ -417,19 +417,19 @@
             const GOOGLE_SPREADSHEET_ID = "1OfGyESqORhCNdQRm7kVQkF9jirkpZPO1FNnZxmzFIZc"; 
             const SHIFT_DEF_SHEET_NAME = "班別資料"; 
             const LEAVE_SHEET_NAME = "預假資料";
-            const SWAP_SHEET_NAME = "換班資料"; 
+            const SWAP_SHEET_NAME = "換班資料"; // ★ 必須與 Google Sheet 分頁名稱一致
             
-            // Google 表單網址
+            // Google 表單網址 (換班申請)
             const SWAP_FORM_BASE_URL = "https://docs.google.com/forms/d/e/1FAIpQLSey-hvNu8_hP4R0AgGJ-EtlTGqWnfc0w85RqRM-hS8tTPc2qw/viewform"; 
             
-            // Google 表單欄位代碼
+            // Google 表單欄位代碼 (Entry IDs) - 用於自動填寫
             const FORM_ENTRY_IDS = {
-                applicantName: "entry.716792991",  
-                sourceDate:    "entry.760765934",  
-                sourceShift:   "entry.1551476672", 
-                targetName:    "entry.726593608",  
-                targetDate:    "entry.1673264831", 
-                targetShift:   "entry.1522980102"  
+                applicantName: "entry.716792991",  // 申請人
+                sourceDate:    "entry.760765934",  // 原本日期
+                sourceShift:   "entry.1551476672", // 原本班別
+                targetName:    "entry.726593608",  // 對方姓名
+                targetDate:    "entry.1673264831", // 對方日期
+                targetShift:   "entry.1522980102"  // 對方班別
             };
 
             const LEAVE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSduRN8BA-qqwXftTxrf4qhc_DhiE5vXHxCEHA7PlerDuZd8Uw/viewform";
@@ -438,26 +438,34 @@
             // 2. 狀態管理 (STATE)
             // ==========================================
             const [currentMonth, setCurrentMonth] = useState("2026-01");
+            // 記憶上次停留的分頁
             const [activeTab, setActiveTab] = useState(localStorage.getItem('lastActiveTab') || "personal");
+            
             const [scheduleData, setScheduleData] = useState({ headers: [], data: [] });
             const [shiftDefs, setShiftDefs] = useState({});
             const [shiftOrder, setShiftOrder] = useState([]);
             const [leaveData, setLeaveData] = useState({}); 
-            const [swapData, setSwapData] = useState([]); 
+            const [swapData, setSwapData] = useState([]); // 換班資料
+
             const [loading, setLoading] = useState(false);
             const [error, setError] = useState(null);
 
+            // 操作互動狀態
             const [viewingShiftCode, setViewingShiftCode] = useState(null);
             const [selectedDayIndex, setSelectedDayIndex] = useState(0);
             const [selectedPersonId, setSelectedPersonId] = useState("");
             const [comparePersonId, setComparePersonId] = useState("");
             
+            // 換班模式狀態
             const [isSwapMode, setIsSwapMode] = useState(false);
             const [swapSelection, setSwapSelection] = useState({ source: null, target: null });
             const [showSwapConfirm, setShowSwapConfirm] = useState(false);
-            const [swapRequests, setSwapRequests] = useState([]);
+            const [swapRequests, setSwapRequests] = useState([]); // 本地暫存紀錄
 
+            // 矩陣視圖狀態
             const [matrixStartIndex, setMatrixStartIndex] = useState(0);
+
+            // 觸控滑動參考
             const touchStartRef = useRef(null);
             const touchEndRef = useRef(null);
             const minSwipeDistance = 80; 
@@ -467,8 +475,12 @@
             // 3. 輔助函式 (HELPERS)
             // ==========================================
             
-            useEffect(() => { localStorage.setItem('lastActiveTab', activeTab); }, [activeTab]);
+            // 儲存分頁位置
+            useEffect(() => {
+                localStorage.setItem('lastActiveTab', activeTab);
+            }, [activeTab]);
 
+            // 讀取本地換班紀錄
             useEffect(() => {
                 const savedId = localStorage.getItem('lastSelectedPersonId');
                 if (savedId) setSelectedPersonId(savedId);
@@ -476,6 +488,7 @@
                 if (savedReqs) setSwapRequests(JSON.parse(savedReqs));
             }, []);
 
+            // 日期樣式判斷
             const getDateStyleInfo = (headerStr, currentMonth) => {
                 if (!headerStr) return { type: 'normal', colorClass: 'text-gray-600' };
                 const dayNum = headerStr.replace(/[^0-9]/g, '');
@@ -486,6 +499,7 @@
                 return { type: 'normal', colorClass: 'text-gray-600', bgClass: 'bg-white border-gray-200' };
             };
 
+            // 班別樣式判斷
             const getShiftStyle = (code) => {
                 const c = (code || "").trim().toUpperCase();
                 if (["O", "H", "N", "-", "D0"].includes(c)) return "bg-pink-50 text-pink-700 border-pink-200";
@@ -500,75 +514,55 @@
                 return shiftDefs[cleanCode] || { time: "", desc: "" };
             };
 
+            // 產生當月所有日期 (用於無班表時)
             const getMonthDays = (yearMonth) => {
                 const [year, month] = yearMonth.split('-').map(Number);
                 const daysInMonth = new Date(year, month, 0).getDate();
                 return Array.from({length: daysInMonth}, (_, i) => String(i + 1));
             };
 
+            // ★ 新增：日期標準化小工具 (解決格式不一致問題)
+            // 不管 Google Sheet 給的是 2026/1/19 還是 2026/01/19，都統一轉成 2026-01-19
             const normalizeDate = (dateStr) => {
                 if (!dateStr) return "";
                 const d = new Date(dateStr);
+                // 若無法解析成日期，就回傳原本字串
                 if (isNaN(d.getTime())) return dateStr; 
+                
                 const y = d.getFullYear();
                 const m = String(d.getMonth() + 1).padStart(2, '0');
                 const day = String(d.getDate()).padStart(2, '0');
                 return `${y}-${m}-${day}`;
             };
 
+            // ★ 修正版：解析換班 CSV 資料
             const processSwapData = (csvText) => {
                 const rows = parseCSV(csvText);
                 const swaps = [];
+                // 假設欄位順序: Timestamp(0), 申請人(1), 原日期(2), 原班別(3), 對方(4), 對方日期(5), 對方班別(6)
                 for(let i=1; i<rows.length; i++) {
                     const r = rows[i];
                     if(r.length < 7) continue;
+                    
+                    // 檢查申請人欄位是否有值，避免讀到空行
                     if(!r[1]) continue;
+
                     swaps.push({
                         applicant: r[1],
-                        sourceDate: normalizeDate(r[2]), 
+                        sourceDate: normalizeDate(r[2]), // ★ 加入標準化處理 (關鍵！)
                         sourceShift: r[3],
                         targetName: r[4],
-                        targetDate: normalizeDate(r[5]), 
+                        targetDate: normalizeDate(r[5]), // ★ 加入標準化處理 (關鍵！)
                         targetShift: r[6],
                         timestamp: r[0]
                     });
                 }
+                // 依申請時間倒序排列
                 return swaps.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
             };
 
-            // ★ 核心功能：檢查換班是否已經完成 (已排進班表)
-            const isSwapProcessed = (swap) => {
-                // 1. 確保有班表資料
-                if (!scheduleData.headers || scheduleData.headers.length === 0) return false;
-
-                // 2. 找到申請人與對方的列
-                const applicantRow = scheduleData.data.find(r => r[2] === swap.applicant);
-                const targetRow = scheduleData.data.find(r => r[2] === swap.targetName);
-                if (!applicantRow || !targetRow) return false;
-
-                // 3. 找到日期的欄位索引
-                const sourceDateIdx = scheduleData.headers.indexOf(swap.sourceDate);
-                const targetDateIdx = scheduleData.headers.indexOf(swap.targetDate);
-                
-                // 如果日期不在目前月份，無法判斷，視為未處理 (或根據需求調整)
-                if (sourceDateIdx === -1 || targetDateIdx === -1) return false;
-
-                // 4. 比對班表上的實際班別
-                const currentApplicantShift = applicantRow[3 + sourceDateIdx]; // 申請人當天目前的班
-                const currentTargetShift = targetRow[3 + targetDateIdx];       // 對方當天目前的班
-
-                // 5. 判斷邏輯：
-                // 如果「申請人現在的班」等於「原本想換過去的班 (TargetShift)」
-                // 且「對方現在的班」等於「申請人原本的班 (SourceShift)」
-                // 代表換班已完成
-                const isApplicantDone = currentApplicantShift === swap.targetShift;
-                const isTargetDone = currentTargetShift === swap.sourceShift;
-
-                return isApplicantDone && isTargetDone;
-            };
-
             // ==========================================
-            // 4. 資料讀取 (DATA FETCHING) - 修正版
+            // 4. 資料讀取 (DATA FETCHING)
             // ==========================================
             useEffect(() => {
                 const fetchData = async () => {
@@ -576,16 +570,16 @@
                     try {
                         const baseUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
                         
-                        // ★ 修正重點：補回 resSwap 的定義與 fetch 動作
                         const [resDefs, resSched, resLeave, resSwap] = await Promise.all([ 
                             fetch(`${baseUrl}&sheet=${encodeURIComponent(SHIFT_DEF_SHEET_NAME)}`), 
                             fetch(`${baseUrl}&sheet=${encodeURIComponent(currentMonth)}`).then(res => res.ok ? res : null).catch(() => null),
                             fetch(`${baseUrl}&sheet=${encodeURIComponent(LEAVE_SHEET_NAME)}`).catch(() => null),
-                            fetch(`${baseUrl}&sheet=${encodeURIComponent(SWAP_SHEET_NAME)}`).catch(() => null) // ★ 這一行之前漏掉了
+                            fetch(`${baseUrl}&sheet=${encodeURIComponent(SWAP_SHEET_NAME)}`).catch(() => null)
                         ]);
 
                         const defsText = await resDefs.text();
                         
+                        // 處理班表
                         if (resSched) {
                             const scheduleText = await resSched.text();
                             if (!scheduleText.includes("<!DOCTYPE html") && !scheduleText.includes("status: 'error'")) {
@@ -593,13 +587,12 @@
                             }
                         }
                         
+                        // 處理預假
                         if (resLeave && resLeave.ok) {
-                            // 修正：使用 await 讀取文字
-                            const leaveText = await resLeave.text(); 
-                            setLeaveData(processLeaveData(leaveText));
+                            setLeaveData(processLeaveData(await resLeave.text()));
                         }
 
-                        // ★ 處理換班資料 (因為補回了 resSwap，這裡就不會報錯了)
+                        // 處理換班
                         if (resSwap && resSwap.ok) {
                             setSwapData(processSwapData(await resSwap.text()));
                         }
@@ -626,6 +619,7 @@
                 });
             };
 
+            // 選擇換班對象
             const handleSwapSelect = (idx, date, myCode, targetCode) => {
                 if (!swapSelection.source) {
                     setSwapSelection({ ...swapSelection, source: { idx, date, code: myCode } });
@@ -640,49 +634,69 @@
             };
 
             const handleDeleteRequest = (id) => {
-                if(!confirm("確定要刪除這筆本地紀錄嗎？")) return;
+                if(!confirm("確定要刪除這筆本地紀錄嗎？(不會影響已送出的表單)")) return;
                 const updatedRequests = swapRequests.filter(req => req.id !== id);
                 setSwapRequests(updatedRequests);
                 localStorage.setItem('swapRequests', JSON.stringify(updatedRequests));
             };
 
+            // ★ 修正版：確認換班 (加入日期格式轉換功能)
             const confirmSwap = async () => {
                 const applicantName = scheduleData.data.find(p => p[1] === selectedPersonId)?.[2] || "我";
                 const targetName = swapSelection.target.name;
-                const sDateRaw = swapSelection.source.date; 
+                const sDateRaw = swapSelection.source.date; // 原始標題 (如 "19" 或 "19(一)")
                 const sCode = swapSelection.source.code;
                 const tDateRaw = swapSelection.target.date;
                 const tCode = swapSelection.target.code;
 
+                // ★ 日期轉換 Helper：將 "19" 或 "19(一)" 轉為 "2026-01-19"
                 const toFormDate = (rawStr) => {
+                    // 1. 取出字串中的所有數字
                     let dayNum = rawStr.replace(/[^0-9]/g, '');
-                    if (parseInt(dayNum) > 31) dayNum = dayNum.slice(-2); 
+                    
+                    // (防呆) 如果標題是 "1/19" 這種含月份的，避免變成 "119"
+                    // 如果數字大於 32，很有可能是連月份都抓到了 (如 119)，我們試著取後兩碼
+                    if (parseInt(dayNum) > 31) {
+                         // 簡單處理：假設最後兩位是日期 (這視您的標題格式而定，通常 "1"~"31" 沒問題)
+                         // 建議班表標題保持單純數字或 "日(週)" 格式
+                         dayNum = dayNum.slice(-2); 
+                    }
+
+                    // 2. 組合年份與月份 (currentMonth 是 "2026-01")
                     return `${currentMonth}-${dayNum.padStart(2, '0')}`;
                 };
 
                 const sDateFormatted = toFormDate(sDateRaw);
                 const tDateFormatted = toFormDate(tDateRaw);
 
+                // 1. 複製文字 (保留貼心功能，這裡用原始標題比較好讀)
                 const copyText = `您好，我是${applicantName}，想用 ${sDateRaw} 的 ${sCode} 班，與 ${targetName} 在 ${tDateRaw} 的 ${tCode} 班互換，請組長核示。`;
-                try { await navigator.clipboard.writeText(copyText); } catch (err) { console.error("Copy failed", err); }
+                try {
+                    await navigator.clipboard.writeText(copyText);
+                } catch (err) { console.error("Copy failed", err); }
 
+                // 2. 建立預填網址 (Auto-fill URL)
                 const params = new URLSearchParams();
+                
                 params.append(FORM_ENTRY_IDS.applicantName, applicantName);
-                params.append(FORM_ENTRY_IDS.sourceDate, sDateFormatted);
+                params.append(FORM_ENTRY_IDS.sourceDate, sDateFormatted); // ★ 使用轉換後的標準日期
                 params.append(FORM_ENTRY_IDS.sourceShift, sCode);
                 params.append(FORM_ENTRY_IDS.targetName, targetName);
-                params.append(FORM_ENTRY_IDS.targetDate, tDateFormatted);
+                params.append(FORM_ENTRY_IDS.targetDate, tDateFormatted); // ★ 使用轉換後的標準日期
                 params.append(FORM_ENTRY_IDS.targetShift, tCode);
 
                 const prefilledUrl = `${SWAP_FORM_BASE_URL}?usp=pp_url&${params.toString()}`;
+
+                // 3. 開啟表單
                 window.open(prefilledUrl, '_blank');
 
+                // 4. 儲存本地紀錄
                 const newRequest = {
                     id: Date.now(),
                     applicantId: selectedPersonId,
                     targetId: comparePersonId,
                     applicantName, targetName, 
-                    sourceDate: sDateRaw, sourceCode: sCode, 
+                    sourceDate: sDateRaw, sourceCode: sCode, // 本地顯示保留原始標題較習慣
                     targetDate: tDateRaw, targetCode: tCode,
                     status: "pending", timestamp: new Date().toISOString()
                 };
@@ -721,6 +735,9 @@
                 setActiveTab('daily');
             };
 
+            const getRequestStatus = (req) => "pending"; 
+
+            // 觸控滑動處理
             const onTouchStart = (e) => { touchEndRef.current = null; touchStartRef.current = e.targetTouches[0].clientX; };
             const onTouchMove = (e) => { touchEndRef.current = e.targetTouches[0].clientX; };
             const onTouchEnd = () => {
@@ -743,6 +760,7 @@
                 touchStartRef.current = null; touchEndRef.current = null;
             };
 
+            // 自動捲動到指定日期
             const scrollToDay = (index) => {
                 setTimeout(() => {
                     const container = scrollRef.current;
@@ -758,6 +776,7 @@
                 if (activeTab === 'daily') scrollToDay(selectedDayIndex);
             }, [activeTab, selectedDayIndex]);
 
+            // 自動跳轉到今日 (所有分頁通用)
             useEffect(() => {
                 const today = new Date();
                 const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -789,6 +808,7 @@
                 return { isToday: true, dateStr: `${today.getMonth() + 1}/${dayOfMonth}`, shiftCode, shiftInfo };
             };
 
+            // 顯示用 Headers & 起始欄位
             const displayHeaders = scheduleData.headers.length > 0 ? scheduleData.headers : getMonthDays(currentMonth);
             const startCol = new Date(currentMonth + "-01").getDay() + 1;
 
@@ -821,7 +841,7 @@
                         {/* -------------------- VIEW: PERSONAL -------------------- */}
                         {!loading && activeTab === 'personal' && (
                             <div className="animate-fade-in space-y-4">
-                                {/* Person Select & Today Shift Card Container */}
+                                {/* 人員選擇 & 今日班別卡片整合 */}
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 flex flex-col md:flex-row justify-between items-center gap-4 relative">
                                     <div className="relative group w-full md:w-auto">
                                         <div className="flex items-center gap-2 cursor-pointer justify-center md:justify-start">
@@ -830,33 +850,28 @@
                                             </h2>
                                             <i data-lucide="chevron-down" className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors"></i>
                                         </div>
-                                        <select 
-                                            value={selectedPersonId} 
-                                            onChange={e => {setSelectedPersonId(e.target.value); localStorage.setItem('lastSelectedPersonId', e.target.value);}} 
-                                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                                        >
+                                        <select value={selectedPersonId} onChange={e => {setSelectedPersonId(e.target.value); localStorage.setItem('lastSelectedPersonId', e.target.value);}} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
                                             <option value="" disabled>選擇人員...</option>
                                             {scheduleData.data.map(p => <option key={p[1]} value={p[1]}>{p[2]}</option>)}
                                         </select>
                                     </div>
 
-                                    {/* Right: Today Shift Card (Integrated) */}
+                                    {/* 今日班別卡片 */}
                                     {selectedPersonId && (() => {
                                         const person = scheduleData.data.find(p => p[1] === selectedPersonId);
                                         const todayInfo = getTodayInfo(person);
-                                        
                                         if (!todayInfo || !todayInfo.isToday || !todayInfo.shiftCode || todayInfo.shiftCode === '-' || todayInfo.shiftCode === '') return null;
-
                                         const { shiftCode, shiftInfo } = todayInfo;
                                         const timeStr = shiftInfo?.time || "時間未定";
                                         
+                                        // 卡片配色邏輯
                                         let gradientClass = "from-gray-500 to-gray-400";
                                         const c = shiftCode.toUpperCase();
                                         if (["O", "H", "N", "OFF"].includes(c)) gradientClass = "from-pink-500 to-rose-400";
                                         else if (["HA", "NN", "A"].includes(c) || c.includes("P")) gradientClass = "from-blue-500 to-cyan-400";
                                         else if (c.includes("S") || c.includes("C")) gradientClass = "from-emerald-500 to-teal-400";
                                         else if (c.includes("D") || c.includes("U")) gradientClass = "from-amber-500 to-orange-400";
-
+                                        
                                         return (
                                             <div className={`w-full md:w-auto min-w-[260px] rounded-lg bg-gradient-to-r ${gradientClass} p-3 text-white shadow-md relative overflow-hidden flex items-center justify-between gap-4 transform transition-all hover:scale-[1.02]`}>
                                                 <div className="absolute -right-3 -bottom-3 opacity-20 transform rotate-12"><i data-lucide="clock" className="w-20 h-20 text-white"></i></div>
@@ -875,52 +890,7 @@
                                     })()}
                                 </div>
 
-                                {/* ★ 新增：個人換班提醒 (Personal Swap Alerts) */}
-                                {selectedPersonId && (() => {
-                                    const selectedName = scheduleData.data.find(p => p[1] === selectedPersonId)?.[2];
-                                    if (!selectedName) return null;
-
-                                    // 找出與我有關的「今日」換班申請
-                                    // 條件： 
-                                    // 1. 我是申請人 OR 我是對方
-                                    // 2. 換班日期涉及今天 (SourceDate=Today OR TargetDate=Today)
-                                    // 3. 未被處理 (isSwapProcessed = false)
-                                    const today = new Date();
-                                    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-                                    const myActiveSwaps = swapData.filter(s => {
-                                        const isMe = s.applicant === selectedName || s.targetName === selectedName;
-                                        const isToday = s.sourceDate === todayStr || s.targetDate === todayStr;
-                                        return isMe && isToday && !isSwapProcessed(s);
-                                    });
-
-                                    if (myActiveSwaps.length === 0) return null;
-
-                                    return (
-                                        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 shadow-sm animate-pulse-slow">
-                                            <h3 className="text-sm font-bold text-yellow-800 flex items-center gap-2 mb-2">
-                                                <i data-lucide="bell" className="w-4 h-4"></i> 今日換班提醒
-                                            </h3>
-                                            <div className="space-y-2">
-                                                {myActiveSwaps.map((s, idx) => (
-                                                    <div key={idx} className="bg-white p-2 rounded border border-yellow-100 flex justify-between items-center text-xs text-gray-700">
-                                                        <div className="flex items-center gap-1">
-                                                            <span className="font-bold text-blue-600">{s.applicant}</span>
-                                                            <span className="bg-gray-100 px-1 rounded">{s.sourceShift}</span>
-                                                        </div>
-                                                        <i data-lucide="arrow-right" className="w-3 h-3 text-gray-400"></i>
-                                                        <div className="flex items-center gap-1">
-                                                            <span className="font-bold text-gray-600">{s.targetName}</span>
-                                                            <span className="bg-gray-100 px-1 rounded">{s.targetShift}</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-
-                                {/* Compare & Swap Controls */}
+                                {/* 對照與換班控制區 */}
                                 {selectedPersonId && (
                                     <div className={`rounded-xl p-4 border transition-all ${isSwapMode ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200' : 'bg-gray-50 border-gray-200'}`}>
                                         <div className="flex items-center justify-between mb-2">
@@ -930,48 +900,33 @@
                                                     {isSwapMode ? "換班模式進行中" : "對照與換班"}
                                                 </span>
                                             </div>
-                                            
                                             {!isSwapMode && comparePersonId && (
-                                                <button onClick={() => setIsSwapMode(true)} className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow hover:bg-blue-700 transition flex items-center gap-1">
-                                                    <i data-lucide="arrow-left-right" className="w-3 h-3"></i> 申請換班
-                                                </button>
+                                                <button onClick={() => setIsSwapMode(true)} className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-full font-bold shadow hover:bg-blue-700 transition flex items-center gap-1"><i data-lucide="arrow-left-right" className="w-3 h-3"></i> 申請換班</button>
                                             )}
                                             {isSwapMode && (
                                                 <button onClick={cancelSwapMode} className="bg-gray-200 text-gray-600 text-xs px-3 py-1.5 rounded-full font-bold hover:bg-gray-300 transition">取消</button>
                                             )}
                                         </div>
-
                                         <div className="relative flex items-center gap-2">
-                                            <select 
-                                                value={comparePersonId} 
-                                                onChange={e => setComparePersonId(e.target.value)} 
-                                                disabled={isSwapMode}
-                                                className="w-full appearance-none bg-white border border-gray-300 text-gray-700 text-sm rounded-lg p-2 pr-8 focus:ring-blue-500 disabled:opacity-50 font-medium"
-                                            >
+                                            <select value={comparePersonId} onChange={e => setComparePersonId(e.target.value)} disabled={isSwapMode} className="w-full appearance-none bg-white border border-gray-300 text-gray-700 text-sm rounded-lg p-2 pr-8 focus:ring-blue-500 disabled:opacity-50 font-medium">
                                                 <option value="">選擇對照人員...</option>
                                                 {scheduleData.data.filter(p => p[1] !== selectedPersonId).map(p => <option key={p[1]} value={p[1]}>{p[2]}</option>)}
                                             </select>
                                             <i data-lucide="chevron-down" className="absolute right-2 top-3 w-4 h-4 text-gray-400"></i>
-                                            {comparePersonId && !isSwapMode && (
-                                                <button onClick={() => setComparePersonId("")} className="bg-gray-100 p-2 rounded-lg text-gray-500 hover:text-red-500 transition"><i data-lucide="x" className="w-4 h-4"></i></button>
-                                            )}
+                                            {comparePersonId && !isSwapMode && <button onClick={() => setComparePersonId("")} className="bg-gray-100 p-2 rounded-lg text-gray-500 hover:text-red-500 transition"><i data-lucide="x" className="w-4 h-4"></i></button>}
                                         </div>
-                                        {isSwapMode && (
-                                            <div className="mt-2 text-xs text-blue-600 font-bold animate-pulse">
-                                                {!swapSelection.source ? "➊ 請點選您的班別 (藍色選取)" : "➋ 請點選對方的班別 (紅色選取)"}
-                                            </div>
-                                        )}
+                                        {isSwapMode && <div className="mt-2 text-xs text-blue-600 font-bold animate-pulse">{!swapSelection.source ? "➊ 請點選您的班別 (藍色選取)" : "➋ 請點選對方的班別 (紅色選取)"}</div>}
                                     </div>
                                 )}
 
-                                {/* Calendar */}
+                                {/* 個人行事曆 */}
                                 {selectedPersonId && (
                                     <CalendarGrid 
-                                        headers={scheduleData.headers}
+                                        headers={displayHeaders}
                                         person={scheduleData.data.find(p => p[1] === selectedPersonId)}
                                         comparePerson={comparePersonId ? scheduleData.data.find(p => p[1] === comparePersonId) : null}
                                         currentMonth={currentMonth}
-                                        startCol={scheduleData.headers.length > 0 ? new Date(currentMonth + "-01").getDay() + 1 : 1}
+                                        startCol={startCol}
                                         getShiftStyle={getShiftStyle}
                                         getDateStyleInfo={getDateStyleInfo}
                                         onDayClick={handleGridDayClick}
@@ -979,42 +934,6 @@
                                         swapSelection={swapSelection}
                                         onSwapSelect={handleSwapSelect}
                                     />
-                                )}
-
-                                {/* Local Requests Display */}
-                                {swapRequests.length > 0 && (
-                                    <div className="mt-6">
-                                        <h3 className="text-sm font-bold text-gray-500 mb-2 px-1 flex items-center gap-2">
-                                            <i data-lucide="history" className="w-4 h-4"></i> 換班申請紀錄
-                                        </h3>
-                                        <div className="space-y-2">
-                                            {swapRequests.map(req => {
-                                                const currentStatus = getRequestStatus(req);
-                                                return (
-                                                    <div key={req.id} className="bg-white p-3 rounded-lg border border-gray-200 shadow-sm text-sm relative group">
-                                                        <button 
-                                                            onClick={() => handleDeleteRequest(req.id)}
-                                                            className="absolute top-2 right-2 p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition"
-                                                            title="刪除紀錄"
-                                                        >
-                                                            <i data-lucide="trash-2" className="w-4 h-4"></i>
-                                                        </button>
-                                                        <div className="flex justify-between items-center mb-1 pr-8">
-                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${currentStatus === 'processed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                                                                {currentStatus === 'processed' ? '已處理' : '申請中'}
-                                                            </span>
-                                                            <span className="text-xs text-gray-400">{req.timestamp.split('T')[0]}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 text-gray-700 font-medium">
-                                                            <span>{req.applicantName} {req.sourceDate} {req.sourceCode}</span>
-                                                            <i data-lucide="arrow-left-right" className="w-3 h-3 text-gray-400"></i>
-                                                            <span>{req.targetName} {req.targetDate} {req.targetCode}</span>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
                                 )}
                             </div>
                         )}
@@ -1037,19 +956,15 @@
                                     })}
                                 </div>
 
-                                {/* 換班公告欄 (Swap Bulletin) - 視覺優化版 */}
+                              {/* 換班公告欄 (Swap Bulletin) - 視覺優化版 */}
                                 {(() => {
                                     // 1. 解析當日日期 (含防呆)
                                     let dayStr = displayHeaders[selectedDayIndex].replace(/[^0-9]/g, '');
                                     if (parseInt(dayStr) > 31) dayStr = dayStr.slice(-2);
                                     const targetDate = `${currentMonth}-${dayStr.padStart(2, '0')}`;
                                     
-                                    // 2. 篩選資料 (★ 修正：加入 !isSwapProcessed 條件)
-                                    // 只有當日期符合，且該換班「尚未完成」時才顯示
-                                    const todaysSwaps = swapData.filter(s => {
-                                        const isDateMatch = s.sourceDate === targetDate || s.targetDate === targetDate;
-                                        return isDateMatch && !isSwapProcessed(s);
-                                    });
+                                    // 2. 篩選資料
+                                    const todaysSwaps = swapData.filter(s => s.sourceDate === targetDate || s.targetDate === targetDate);
 
                                     if(todaysSwaps.length === 0) return null;
 
@@ -1102,7 +1017,6 @@
                                         </div>
                                     );
                                 })()}
-
                                 {/* 當日排班列表 */}
                                 <div className="flex justify-between items-end">
                                     <h2 className="text-lg font-bold text-gray-800 flex items-center">
@@ -1231,9 +1145,6 @@
     </script>
 </body>
 </html>
-
-
-
 
 
 
