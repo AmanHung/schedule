@@ -522,7 +522,21 @@
                 return Array.from({length: daysInMonth}, (_, i) => String(i + 1));
             };
 
-            // 解析換班 CSV 資料
+            // ★ 新增：日期標準化小工具 (解決格式不一致問題)
+            // 不管 Google Sheet 給的是 2026/1/19 還是 2026/01/19，都統一轉成 2026-01-19
+            const normalizeDate = (dateStr) => {
+                if (!dateStr) return "";
+                const d = new Date(dateStr);
+                // 若無法解析成日期，就回傳原本字串
+                if (isNaN(d.getTime())) return dateStr; 
+                
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${y}-${m}-${day}`;
+            };
+
+            // ★ 修正版：解析換班 CSV 資料
             const processSwapData = (csvText) => {
                 const rows = parseCSV(csvText);
                 const swaps = [];
@@ -530,12 +544,16 @@
                 for(let i=1; i<rows.length; i++) {
                     const r = rows[i];
                     if(r.length < 7) continue;
+                    
+                    // 檢查申請人欄位是否有值，避免讀到空行
+                    if(!r[1]) continue;
+
                     swaps.push({
                         applicant: r[1],
-                        sourceDate: r[2], // 格式通常為 YYYY-MM-DD
+                        sourceDate: normalizeDate(r[2]), // ★ 加入標準化處理 (關鍵！)
                         sourceShift: r[3],
                         targetName: r[4],
-                        targetDate: r[5],
+                        targetDate: normalizeDate(r[5]), // ★ 加入標準化處理 (關鍵！)
                         targetShift: r[6],
                         timestamp: r[0]
                     });
@@ -1118,6 +1136,7 @@
     </script>
 </body>
 </html>
+
 
 
 
