@@ -544,25 +544,53 @@
                 return swaps.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
             };
 
-            // ★ 核心功能：檢查換班是否已經完成 (已排進班表)
+            // ★ 修正版：檢查換班是否已經完成 (解決標題格式不符導致無法隱藏的問題)
             const isSwapProcessed = (swap) => {
+                // 1. 確保有班表資料
                 if (!scheduleData.headers || scheduleData.headers.length === 0) return false;
 
+                // 2. 確保換班日期屬於「目前顯示的月份」，否則無法檢查 (視為未完成)
+                // 例如：目前看 1 月，但換班是 2 月的，就先不隱藏
+                if (!swap.sourceDate.startsWith(currentMonth) || !swap.targetDate.startsWith(currentMonth)) {
+                    return false; 
+                }
+
+                // 3. 找到申請人與對方的列
                 const applicantRow = scheduleData.data.find(r => r[2] === swap.applicant);
                 const targetRow = scheduleData.data.find(r => r[2] === swap.targetName);
                 if (!applicantRow || !targetRow) return false;
 
-                const sourceDateIdx = scheduleData.headers.indexOf(swap.sourceDate);
-                const targetDateIdx = scheduleData.headers.indexOf(swap.targetDate);
+                // 4. ★ 修正重點：透過「日期數字」來尋找對應的欄位索引 (Col Index)
+                const getColIndex = (dateStr) => {
+                    // 從 YYYY-MM-DD 取出日期數字 (例如 19)
+                    const targetDay = parseInt(dateStr.split('-')[2], 10);
+                    
+                    return scheduleData.headers.findIndex(h => {
+                        // 從班表標題 (例如 "19", "19(一)") 取出數字
+                        const hNum = parseInt(h.replace(/[^0-9]/g, ''));
+                        return hNum === targetDay;
+                    });
+                };
+
+                const sourceDateIdx = getColIndex(swap.sourceDate);
+                const targetDateIdx = getColIndex(swap.targetDate);
                 
+                // 如果找不到對應日期欄位，無法判斷，回傳 false
                 if (sourceDateIdx === -1 || targetDateIdx === -1) return false;
 
-                const currentApplicantShift = applicantRow[3 + sourceDateIdx];
-                const currentTargetShift = targetRow[3 + targetDateIdx];
+                // 5. 比對班表上的實際班別 (加入 trim 避免空白影響)
+                const currentApplicantShift = (applicantRow[3 + sourceDateIdx] || "").trim();
+                const currentTargetShift = (targetRow[3 + targetDateIdx] || "").trim();
 
-                // 判斷是否已交換
-                const isApplicantDone = currentApplicantShift === swap.targetShift;
-                const isTargetDone = currentTargetShift === swap.sourceShift;
+                const expectedApplicantShift = swap.targetShift.trim(); // 申請人想要換過去的班
+                const expectedTargetShift = swap.sourceShift.trim();    // 對方原本的班 (現在該變成對方的班)
+
+                // 6. 判斷邏輯：
+                // 如果「申請人現在的班」已經變成「對方的班」
+                // 且「對方現在的班」已經變成「申請人的班」
+                // 代表換班已完成
+                const isApplicantDone = currentApplicantShift === expectedApplicantShift;
+                const isTargetDone = currentTargetShift === expectedTargetShift;
 
                 return isApplicantDone && isTargetDone;
             };
@@ -1172,6 +1200,7 @@
     </script>
 </body>
 </html>
+
 
 
 
