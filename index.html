@@ -623,26 +623,49 @@
                 localStorage.setItem('swapRequests', JSON.stringify(updatedRequests));
             };
 
-            // ★ 確認換班：自動填寫表單並送出
+            // ★ 修正版：確認換班 (加入日期格式轉換功能)
             const confirmSwap = async () => {
                 const applicantName = scheduleData.data.find(p => p[1] === selectedPersonId)?.[2] || "我";
                 const targetName = swapSelection.target.name;
-                const sDate = swapSelection.source.date;
+                const sDateRaw = swapSelection.source.date; // 原始標題 (如 "19" 或 "19(一)")
                 const sCode = swapSelection.source.code;
-                const tDate = swapSelection.target.date;
+                const tDateRaw = swapSelection.target.date;
                 const tCode = swapSelection.target.code;
 
-                // 1. 複製文字 (貼心備份)
-                const copyText = `您好，我是${applicantName}，想用 ${sDate} 的 ${sCode} 班，與 ${targetName} 在 ${tDate} 的 ${tCode} 班互換，請組長核示。`;
-                try { await navigator.clipboard.writeText(copyText); } catch (err) { console.error("Copy failed", err); }
+                // ★ 日期轉換 Helper：將 "19" 或 "19(一)" 轉為 "2026-01-19"
+                const toFormDate = (rawStr) => {
+                    // 1. 取出字串中的所有數字
+                    let dayNum = rawStr.replace(/[^0-9]/g, '');
+                    
+                    // (防呆) 如果標題是 "1/19" 這種含月份的，避免變成 "119"
+                    // 如果數字大於 32，很有可能是連月份都抓到了 (如 119)，我們試著取後兩碼
+                    if (parseInt(dayNum) > 31) {
+                         // 簡單處理：假設最後兩位是日期 (這視您的標題格式而定，通常 "1"~"31" 沒問題)
+                         // 建議班表標題保持單純數字或 "日(週)" 格式
+                         dayNum = dayNum.slice(-2); 
+                    }
 
-                // 2. 建立 Google 表單預填連結
+                    // 2. 組合年份與月份 (currentMonth 是 "2026-01")
+                    return `${currentMonth}-${dayNum.padStart(2, '0')}`;
+                };
+
+                const sDateFormatted = toFormDate(sDateRaw);
+                const tDateFormatted = toFormDate(tDateRaw);
+
+                // 1. 複製文字 (保留貼心功能，這裡用原始標題比較好讀)
+                const copyText = `您好，我是${applicantName}，想用 ${sDateRaw} 的 ${sCode} 班，與 ${targetName} 在 ${tDateRaw} 的 ${tCode} 班互換，請組長核示。`;
+                try {
+                    await navigator.clipboard.writeText(copyText);
+                } catch (err) { console.error("Copy failed", err); }
+
+                // 2. 建立預填網址 (Auto-fill URL)
                 const params = new URLSearchParams();
+                
                 params.append(FORM_ENTRY_IDS.applicantName, applicantName);
-                params.append(FORM_ENTRY_IDS.sourceDate, sDate);
+                params.append(FORM_ENTRY_IDS.sourceDate, sDateFormatted); // ★ 使用轉換後的標準日期
                 params.append(FORM_ENTRY_IDS.sourceShift, sCode);
                 params.append(FORM_ENTRY_IDS.targetName, targetName);
-                params.append(FORM_ENTRY_IDS.targetDate, tDate);
+                params.append(FORM_ENTRY_IDS.targetDate, tDateFormatted); // ★ 使用轉換後的標準日期
                 params.append(FORM_ENTRY_IDS.targetShift, tCode);
 
                 const prefilledUrl = `${SWAP_FORM_BASE_URL}?usp=pp_url&${params.toString()}`;
@@ -655,7 +678,9 @@
                     id: Date.now(),
                     applicantId: selectedPersonId,
                     targetId: comparePersonId,
-                    applicantName, targetName, sourceDate: sDate, sourceCode: sCode, targetDate: tDate, targetCode: tCode,
+                    applicantName, targetName, 
+                    sourceDate: sDateRaw, sourceCode: sCode, // 本地顯示保留原始標題較習慣
+                    targetDate: tDateRaw, targetCode: tCode,
                     status: "pending", timestamp: new Date().toISOString()
                 };
                 const updatedRequests = [newRequest, ...swapRequests];
@@ -1079,6 +1104,7 @@
     </script>
 </body>
 </html>
+
 
 
 
