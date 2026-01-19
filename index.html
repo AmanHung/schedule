@@ -779,6 +779,13 @@
             };
 
             useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [activeTab, selectedDayIndex, swapData, isSwapMode, loading]); // 監聽這些變數
+
+            // (原本的 Scroll to Day 邏輯)
+            useEffect(() => {
                 if (activeTab === 'daily') scrollToDay(selectedDayIndex);
             }, [activeTab, selectedDayIndex]);
 
@@ -1200,6 +1207,7 @@
     </script>
 </body>
 </html>
+
 
 
 
