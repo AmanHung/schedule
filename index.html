@@ -957,7 +957,7 @@
                                     })}
                                 </div>
 
-                               {/* 換班公告欄 (Swap Bulletin) - 優化版 */}
+                              {/* 換班公告欄 (Swap Bulletin) - 視覺優化版 */}
                                 {(() => {
                                     // 1. 解析當日日期 (含防呆)
                                     let dayStr = displayHeaders[selectedDayIndex].replace(/[^0-9]/g, '');
@@ -970,48 +970,47 @@
                                     if(todaysSwaps.length === 0) return null;
 
                                     return (
-                                        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 shadow-sm animate-fade-in mb-4">
-                                            <h3 className="text-sm font-bold text-orange-800 flex items-center gap-2 mb-3">
-                                                <i data-lucide="arrow-left-right" className="w-4 h-4"></i> 本日換班動態
+                                        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm animate-fade-in mb-4">
+                                            <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2 mb-3">
+                                                <i data-lucide="arrow-left-right" className="w-4 h-4 text-blue-600"></i> 
+                                                本日換班動態 
+                                                <span className="text-xs font-normal text-gray-400">({targetDate})</span>
                                             </h3>
                                             <div className="space-y-3">
                                                 {todaysSwaps.map((s, idx) => {
-                                                    // 判斷哪一邊是「今天的日期」
                                                     const isSourceToday = s.sourceDate === targetDate;
+                                                    const isTargetToday = s.targetDate === targetDate;
                                                     
+                                                    // 取得與總表一致的班別配色
+                                                    const sourceStyle = getShiftStyle(s.sourceShift);
+                                                    const targetStyle = getShiftStyle(s.targetShift);
+
                                                     return (
-                                                        <div key={idx} className="bg-white rounded-lg border border-orange-100 shadow-sm p-3 relative overflow-hidden">
-                                                            {/* 裝飾背景 */}
-                                                            <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                                                                <i data-lucide="refresh-cw" className="w-16 h-16"></i>
+                                                        <div key={idx} className="flex items-center justify-between bg-gray-50 rounded-lg p-2 border border-gray-200 relative">
+                                                            
+                                                            {/* 左側：申請人 (Source) */}
+                                                            <div className="flex-1 flex flex-col items-center">
+                                                                <span className="text-xs font-bold text-gray-600 mb-1">{s.applicant}</span>
+                                                                <div className={`flex flex-col items-center justify-center w-14 py-1.5 rounded-md border shadow-sm transition-all ${sourceStyle} ${!isSourceToday ? 'opacity-60 scale-95 grayscale-[0.3]' : 'ring-2 ring-blue-400 ring-offset-1 scale-100'}`}>
+                                                                    <span className="text-[10px] font-bold opacity-80">{isSourceToday ? '本日' : s.sourceDate.slice(5)}</span>
+                                                                    <span className="text-xl font-black leading-none">{s.sourceShift}</span>
+                                                                </div>
                                                             </div>
 
-                                                            <div className="relative z-10 flex items-center justify-between gap-2">
-                                                                
-                                                                {/* 左側：申請人 (Source) */}
-                                                                <div className="flex flex-col items-center w-5/12">
-                                                                    <span className="font-black text-gray-700 text-sm mb-1">{s.applicant}</span>
-                                                                    <div className={`flex flex-col items-center justify-center w-full py-1.5 rounded-lg border ${isSourceToday ? 'bg-orange-100 border-orange-200 text-orange-800' : 'bg-gray-50 border-gray-100 text-gray-500'}`}>
-                                                                        <span className="text-[10px] uppercase tracking-wider opacity-80">{isSourceToday ? '本日' : s.sourceDate.slice(5)}</span>
-                                                                        <span className="text-lg font-bold leading-none">{s.sourceShift}</span>
-                                                                    </div>
-                                                                </div>
-
-                                                                {/* 中間：交換圖示 */}
-                                                                <div className="w-2/12 flex flex-col items-center justify-center text-orange-300">
-                                                                    <i data-lucide="arrow-right-left" className="w-5 h-5"></i>
-                                                                </div>
-
-                                                                {/* 右側：對方 (Target) */}
-                                                                <div className="flex flex-col items-center w-5/12">
-                                                                    <span className="font-bold text-gray-600 text-sm mb-1">{s.targetName}</span>
-                                                                    <div className={`flex flex-col items-center justify-center w-full py-1.5 rounded-lg border ${!isSourceToday ? 'bg-orange-100 border-orange-200 text-orange-800' : 'bg-gray-50 border-gray-100 text-gray-500'}`}>
-                                                                        <span className="text-[10px] uppercase tracking-wider opacity-80">{!isSourceToday ? '本日' : s.targetDate.slice(5)}</span>
-                                                                        <span className="text-lg font-bold leading-none">{s.targetShift}</span>
-                                                                    </div>
-                                                                </div>
-
+                                                            {/* 中間：交換圖示 */}
+                                                            <div className="mx-1 flex flex-col items-center justify-center text-gray-400">
+                                                                <i data-lucide="arrow-right-left" className="w-5 h-5"></i>
                                                             </div>
+
+                                                            {/* 右側：對方 (Target) */}
+                                                            <div className="flex-1 flex flex-col items-center">
+                                                                <span className="text-xs font-bold text-gray-600 mb-1">{s.targetName}</span>
+                                                                <div className={`flex flex-col items-center justify-center w-14 py-1.5 rounded-md border shadow-sm transition-all ${targetStyle} ${!isTargetToday ? 'opacity-60 scale-95 grayscale-[0.3]' : 'ring-2 ring-blue-400 ring-offset-1 scale-100'}`}>
+                                                                    <span className="text-[10px] font-bold opacity-80">{isTargetToday ? '本日' : s.targetDate.slice(5)}</span>
+                                                                    <span className="text-xl font-black leading-none">{s.targetShift}</span>
+                                                                </div>
+                                                            </div>
+                                                            
                                                         </div>
                                                     );
                                                 })}
@@ -1147,6 +1146,7 @@
     </script>
 </body>
 </html>
+
 
 
 
