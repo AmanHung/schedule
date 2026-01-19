@@ -568,7 +568,7 @@
             };
 
             // ==========================================
-            // 4. 資料讀取 (DATA FETCHING)
+            // 4. 資料讀取 (DATA FETCHING) - 修正版
             // ==========================================
             useEffect(() => {
                 const fetchData = async () => {
@@ -576,11 +576,12 @@
                     try {
                         const baseUrl = `https://docs.google.com/spreadsheets/d/${GOOGLE_SPREADSHEET_ID}/gviz/tq?tqx=out:csv`;
                         
+                        // ★ 修正重點：補回 resSwap 的定義與 fetch 動作
                         const [resDefs, resSched, resLeave, resSwap] = await Promise.all([ 
                             fetch(`${baseUrl}&sheet=${encodeURIComponent(SHIFT_DEF_SHEET_NAME)}`), 
                             fetch(`${baseUrl}&sheet=${encodeURIComponent(currentMonth)}`).then(res => res.ok ? res : null).catch(() => null),
                             fetch(`${baseUrl}&sheet=${encodeURIComponent(LEAVE_SHEET_NAME)}`).catch(() => null),
-                            fetch(`${baseUrl}&sheet=${encodeURIComponent(SWAP_SHEET_NAME)}`).catch(() => null)
+                            fetch(`${baseUrl}&sheet=${encodeURIComponent(SWAP_SHEET_NAME)}`).catch(() => null) // ★ 這一行之前漏掉了
                         ]);
 
                         const defsText = await resDefs.text();
@@ -592,8 +593,16 @@
                             }
                         }
                         
-                        if (resLeave && resLeave.ok) setLeaveData(processLeaveData(await resLeave.text()));
-                        if (resSwap && resSwap.ok) setSwapData(processSwapData(await resSwap.text()));
+                        if (resLeave && resLeave.ok) {
+                            // 修正：使用 await 讀取文字
+                            const leaveText = await resLeave.text(); 
+                            setLeaveData(processLeaveData(leaveText));
+                        }
+
+                        // ★ 處理換班資料 (因為補回了 resSwap，這裡就不會報錯了)
+                        if (resSwap && resSwap.ok) {
+                            setSwapData(processSwapData(await resSwap.text()));
+                        }
 
                         const { defs, order } = processShiftDefs(defsText);
                         setShiftDefs(defs);
@@ -1222,6 +1231,7 @@
     </script>
 </body>
 </html>
+
 
 
 
