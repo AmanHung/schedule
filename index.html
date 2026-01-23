@@ -865,7 +865,29 @@
 
                         {activeTab === 'matrix' && scheduleData.headers.length > 0 && (
                             <div className="animate-fade-in flex flex-col h-full">
-                                <div className="flex justify-between items-center mb-2 bg-gray-100 p-2 rounded-lg"><button onClick={() => setMatrixStartIndex(prev => Math.max(0, prev - 1))} disabled={matrixStartIndex === 0} className="p-1 rounded hover:bg-white disabled:opacity-30 text-gray-600"><LucideIcon name="chevron-left" className="w-5 h-5"/></button><span className="text-sm font-bold text-gray-700">{scheduleData.headers[matrixStartIndex]} ~ {scheduleData.headers[Math.min(matrixStartIndex + 4, scheduleData.headers.length - 1)]}</span><button onClick={() => setMatrixStartIndex(prev => Math.min(prev + 1, scheduleData.headers.length - 5))} disabled={matrixStartIndex >= scheduleData.headers.length - 5} className="p-1 rounded hover:bg-white disabled:opacity-30 text-gray-600"><LucideIcon name="chevron-right" className="w-5 h-5"/></button></div>
+                                <div className="flex justify-between items-center mb-2 bg-gray-100 p-2 rounded-lg">
+                                    {/* 左箭頭：改成 prev - 5 */}
+                                    <button 
+                                        onClick={() => setMatrixStartIndex(prev => Math.max(0, prev - 5))} 
+                                        disabled={matrixStartIndex === 0} 
+                                        className="p-1 rounded hover:bg-white disabled:opacity-30 text-gray-600"
+                                    >
+                                        <LucideIcon name="chevron-left" className="w-5 h-5"/>
+                                    </button>
+                                    
+                                    <span className="text-sm font-bold text-gray-700">
+                                        {scheduleData.headers[matrixStartIndex]} ~ {scheduleData.headers[Math.min(matrixStartIndex + 4, scheduleData.headers.length - 1)]}
+                                    </span>
+                                    
+                                    {/* 右箭頭：改成 prev + 5 */}
+                                    <button 
+                                        onClick={() => setMatrixStartIndex(prev => Math.min(prev + 5, scheduleData.headers.length - 5))} 
+                                        disabled={matrixStartIndex >= scheduleData.headers.length - 5} 
+                                        className="p-1 rounded hover:bg-white disabled:opacity-30 text-gray-600"
+                                    >
+                                        <LucideIcon name="chevron-right" className="w-5 h-5"/>
+                                    </button>
+                                </div>
                                 <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden flex flex-col" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
                                     <div className="flex border-b border-gray-200 bg-gray-50"><div className="w-20 flex-shrink-0 p-2 text-xs font-bold text-gray-400 flex items-center justify-center border-r border-gray-200 bg-gray-50 z-20">人員</div><div className="flex-grow grid grid-cols-5">{scheduleData.headers.slice(matrixStartIndex, matrixStartIndex + 5).map((h, idx) => { const info = getDateStyleInfo(h, currentMonth); return ( <div key={idx} className={`text-center py-2 border-r border-gray-100 last:border-r-0 flex flex-col items-center justify-center ${info.bgClass}`}><span className={`text-[10px] ${info.colorClass}`}>{h.replace(/[0-9]/g, '')}</span><span className={`text-sm font-bold ${info.colorClass}`}>{h.replace(/[^0-9]/g, '')}</span></div> ); })}</div></div>
                                     <div className="overflow-y-auto max-h-[60vh] hide-scrollbar">{scheduleData.data.map((person, pIdx) => ( <div key={pIdx} className="flex border-b border-gray-100 last:border-b-0 hover:bg-blue-50 transition-colors"><div className="w-20 flex-shrink-0 p-2 text-sm font-bold text-gray-700 flex items-center justify-center border-r border-gray-200 bg-white sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">{person[2]}</div><div className="flex-grow grid grid-cols-5">{scheduleData.headers.slice(matrixStartIndex, matrixStartIndex + 5).map((_, dIdx) => { const realIdx = matrixStartIndex + dIdx; const code = person[3 + realIdx]; const style = getShiftStyle(code); return ( <div key={dIdx} className="border-r border-gray-100 last:border-r-0 p-1 flex items-center justify-center">{code && code !== '-' && ( <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${style.replace('border-l-4', '').replace('border', '')}`}>{code}</span> )}</div> ); })}</div></div> ))}</div>
@@ -893,6 +915,7 @@
     </script>
 </body>
 </html>
+
 
 
 
