@@ -660,6 +660,7 @@
                 if (activeTab === 'daily') scrollToDay(selectedDayIndex);
             }, [activeTab, selectedDayIndex]);
 
+            // 自動跳轉到今日 (所有分頁通用)
             useEffect(() => {
                 const today = new Date();
                 const currentYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -667,7 +668,13 @@
 
                 if (currentMonth === currentYearMonth) {
                     const todayDate = today.getDate(); 
-                    const foundIndex = headersToUse.findIndex(h => parseInt(h.replace(/[^0-9]/g, '')) === todayDate);
+                    // ★ 修正：先用 '/' 切割，取最後一段 (日期)，再轉數字
+                    // 這樣 "2/2" 會變成 2，而不是 22
+                    const foundIndex = headersToUse.findIndex(h => {
+                        const dayPart = h.includes('/') ? h.split('/').pop() : h;
+                        return parseInt(dayPart.replace(/[^0-9]/g, '')) === todayDate;
+                    });
+
                     if (foundIndex !== -1) {
                         setSelectedDayIndex(foundIndex);
                         setMatrixStartIndex(Math.min(foundIndex, Math.max(0, headersToUse.length - 5)));
@@ -684,7 +691,13 @@
                 const todayYearMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
                 if (currentMonth !== todayYearMonth) return { isToday: false, msg: "非當月資料" };
                 const dayOfMonth = today.getDate(); 
-                const headerIndex = scheduleData.headers.findIndex(h => parseInt(h.replace(/[^0-9]/g, '')) === dayOfMonth);
+                
+                // ★ 修正：與上方相同，正確解析含月份的標題 (如 2/2)
+                const headerIndex = scheduleData.headers.findIndex(h => {
+                    const dayPart = h.includes('/') ? h.split('/').pop() : h;
+                    return parseInt(dayPart.replace(/[^0-9]/g, '')) === dayOfMonth;
+                });
+
                 if (headerIndex === -1) return { isToday: false, msg: "無今日資料" };
                 const shiftCode = personRow[3 + headerIndex];
                 const shiftInfo = getShiftInfo(shiftCode);
@@ -915,6 +928,7 @@
     </script>
 </body>
 </html>
+
 
 
 
