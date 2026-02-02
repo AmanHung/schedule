@@ -393,7 +393,11 @@
         };
 
         const App = () => {
-            const [currentMonth, setCurrentMonth] = useState("2026-01");
+            const [currentMonth, setCurrentMonth] = useState(() => {
+                const now = new Date();
+                // 自動組合成 YYYY-MM 格式 (例如 2026-02)
+                return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            });
             const [activeTab, setActiveTab] = useState(localStorage.getItem('lastActiveTab') || "personal");
             const [scheduleData, setScheduleData] = useState({ headers: [], data: [] });
             const [shiftDefs, setShiftDefs] = useState({});
@@ -928,6 +932,7 @@
     </script>
 </body>
 </html>
+
 
 
 
